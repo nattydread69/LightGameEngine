@@ -1,0 +1,46 @@
+{
+	"version": 3,
+	"cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+	"configurePresets": [
+		{
+			"name": "default",
+			"displayName": "Release with Vulkan backend",
+			"generator": "Ninja",
+			"binaryDir": "${sourceDir}/build",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+			}
+		},
+		{
+			"name": "debug",
+			"inherits": "default",
+			"displayName": "Debug with Vulkan backend",
+			"cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+		},
+		{
+			"name": "headless",
+			"inherits": "default",
+			"displayName": "Headless (no Vulkan)",
+			"cacheVariables": { "LGE_BUILD_VULKAN_BACKEND": "OFF" }
+		}
+	],
+	"buildPresets": [
+		{ "name": "default", "configurePreset": "default" },
+		{ "name": "debug", "configurePreset": "debug" },
+		{ "name": "headless", "configurePreset": "headless" }
+	],
+	"testPresets": [
+		{
+			"name": "default",
+			"configurePreset": "default",
+			"output": { "outputOnFailure": true },
+			"filter": { "exclude": { "label": "vulkan" } }
+		},
+		{
+			"name": "headless",
+			"configurePreset": "headless",
+			"output": { "outputOnFailure": true }
+		}
+	]
+}

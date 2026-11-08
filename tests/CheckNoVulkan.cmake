@@ -1,0 +1,17 @@
+# Fails if any engine source outside the Vulkan backend's private sources refers to
+# Vulkan, GLFW or LightVulkanGraphics.
+set(_violations "")
+foreach(_dir IN LISTS SCAN_DIRS)
+	file(GLOB_RECURSE _files "${_dir}/*.h" "${_dir}/*.hpp" "${_dir}/*.cpp")
+	foreach(_file IN LISTS _files)
+		file(STRINGS "${_file}" _lines REGEX "#include.*(vulkan|Vulkan|GLFW|glfw|lightVulkanGraphics|VkApp)|Vk[A-Z][A-Za-z]+[ *&]")
+		if(_lines)
+			list(APPEND _violations "${_file}: ${_lines}")
+		endif()
+	endforeach()
+endforeach()
+if(_violations)
+	string(REPLACE ";" "\n" _report "${_violations}")
+	message(FATAL_ERROR "Vulkan-specific code found outside the Vulkan backend:\n${_report}")
+endif()
+message(STATUS "No Vulkan, GLFW or LightVulkanGraphics references in engine code")
