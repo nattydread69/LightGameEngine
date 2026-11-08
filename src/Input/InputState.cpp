@@ -18,7 +18,9 @@
 
 #include "LightGameEngine/Input/InputState.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace lge
 {
@@ -90,8 +92,79 @@ double InputState::takeMouseScroll() noexcept
 	return steps;
 }
 
+void InputState::setGamepadInput(Gamepad& gamepad, std::size_t const index, bool const down) noexcept
+{
+	applyLevel(gamepad.down, gamepad.pendingPresses, gamepad.pendingReleases, index, down);
+}
+
+double InputState::deadzoned(double const value) const noexcept
+{
+	double const magnitude = std::abs(value);
+	if (magnitude <= gamepadDeadzone_)
+	{
+		return 0.0;
+	}
+	return std::copysign((magnitude - gamepadDeadzone_) / (1.0 - gamepadDeadzone_), value);
+}
+
+void InputState::setGamepadDeadzone(double const deadzone) noexcept
+{
+	// Below 1 so the rescale never divides by zero.
+	gamepadDeadzone_ = std::clamp(deadzone, 0.0, 0.95);
+}
+
+void InputState::setGamepadConnected(std::size_t const pad, bool const connected) noexcept
+{
+	if (pad >= maxGamepads)
+	{
+		return;
+	}
+	Gamepad& gamepad = gamepads_[pad];
+	if (!connected)
+	{
+		for (std::size_t i = 0; i < gamepadInputCount; ++i)
+		{
+			setGamepadInput(gamepad, i, false);
+		}
+		gamepad.axes.fill(0.0);
+	}
+	gamepad.connected = connected;
+}
+
+void InputState::setGamepadButtonDown(std::size_t const pad, GamepadButton const button, bool const down) noexcept
+{
+	if (pad >= maxGamepads || indexOf(button) >= gamepadButtonCount)
+	{
+		return;
+	}
+	setGamepadInput(gamepads_[pad], indexOf(button), down);
+}
+
+void InputState::setGamepadAxis(std::size_t const pad, GamepadAxis const axis, double const value) noexcept
+{
+	if (pad >= maxGamepads || indexOf(axis) >= gamepadAxisCount)
+	{
+		return;
+	}
+	Gamepad& gamepad = gamepads_[pad];
+	// NaN from a faulty driver is treated as centred.
+	double const clamped = std::isnan(value) ? 0.0 : std::clamp(value, -1.0, 1.0);
+	gamepad.axes[indexOf(axis)] = clamped;
+	double const effective = deadzoned(clamped);
+	std::size_t const base = gamepadButtonCount + indexOf(axis) * 2;
+	setGamepadInput(gamepad, base + indexOf(AxisDirection::Negative), effective <= -0.5);
+	setGamepadInput(gamepad, base + indexOf(AxisDirection::Positive), effective >= 0.5);
+}
+
 void InputState::beginTick() noexcept
 {
+	for (Gamepad& gamepad : gamepads_)
+	{
+		gamepad.tickPresses = gamepad.pendingPresses;
+		gamepad.tickReleases = gamepad.pendingReleases;
+		gamepad.pendingPresses.reset();
+		gamepad.pendingReleases.reset();
+	}
 	tickKeyPresses_ = pendingKeyPresses_;
 	tickKeyReleases_ = pendingKeyReleases_;
 	tickButtonPresses_ = pendingButtonPresses_;
@@ -107,7 +180,9 @@ void InputState::beginTick() noexcept
 
 void InputState::reset() noexcept
 {
+	double const deadzone = gamepadDeadzone_;
 	*this = InputState {};
+	gamepadDeadzone_ = deadzone;
 }
 
 bool InputState::isDown(Key const key) const noexcept
@@ -138,6 +213,77 @@ bool InputState::wasPressed(MouseButton const button) const noexcept
 bool InputState::wasReleased(MouseButton const button) const noexcept
 {
 	return indexOf(button) < mouseButtonCount && tickButtonReleases_.test(indexOf(button));
+}
+
+bool InputState::isGamepadConnected(std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && gamepads_[pad].connected;
+}
+
+bool InputState::isDown(GamepadButton const button, std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && indexOf(button) < gamepadButtonCount && gamepads_[pad].down.test(indexOf(button));
+}
+
+bool InputState::wasPressed(GamepadButton const button, std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && indexOf(button) < gamepadButtonCount && gamepads_[pad].tickPresses.test(indexOf(button));
+}
+
+bool InputState::wasReleased(GamepadButton const button, std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && indexOf(button) < gamepadButtonCount && gamepads_[pad].tickReleases.test(indexOf(button));
+}
+
+double InputState::gamepadAxis(GamepadAxis const axis, std::size_t const pad) const noexcept
+{
+	if (pad >= maxGamepads || indexOf(axis) >= gamepadAxisCount)
+	{
+		return 0.0;
+	}
+	return deadzoned(gamepads_[pad].axes[indexOf(axis)]);
+}
+
+glm::dvec2 InputState::gamepadStick(GamepadStick const stick, std::size_t const pad) const noexcept
+{
+	if (pad >= maxGamepads)
+	{
+		return glm::dvec2 {0.0};
+	}
+	std::size_t const first = stick == GamepadStick::Left ? indexOf(GamepadAxis::LeftX) : indexOf(GamepadAxis::RightX);
+	glm::dvec2 const raw {gamepads_[pad].axes[first], gamepads_[pad].axes[first + 1]};
+	double const length = glm::length(raw);
+	if (length <= gamepadDeadzone_)
+	{
+		return glm::dvec2 {0.0};
+	}
+	double const scaled = std::min(1.0, (length - gamepadDeadzone_) / (1.0 - gamepadDeadzone_));
+	return raw / length * scaled;
+}
+
+namespace
+{
+
+std::size_t axisInputIndex(GamepadAxis const axis, AxisDirection const direction) noexcept
+{
+	return gamepadButtonCount + indexOf(axis) * 2 + indexOf(direction);
+}
+
+}
+
+bool InputState::isDown(GamepadAxis const axis, AxisDirection const direction, std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && indexOf(axis) < gamepadAxisCount && gamepads_[pad].down.test(axisInputIndex(axis, direction));
+}
+
+bool InputState::wasPressed(GamepadAxis const axis, AxisDirection const direction, std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && indexOf(axis) < gamepadAxisCount && gamepads_[pad].tickPresses.test(axisInputIndex(axis, direction));
+}
+
+bool InputState::wasReleased(GamepadAxis const axis, AxisDirection const direction, std::size_t const pad) const noexcept
+{
+	return pad < maxGamepads && indexOf(axis) < gamepadAxisCount && gamepads_[pad].tickReleases.test(axisInputIndex(axis, direction));
 }
 
 std::string_view keyName(Key const key) noexcept

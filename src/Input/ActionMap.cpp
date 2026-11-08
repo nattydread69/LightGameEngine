@@ -27,19 +27,82 @@ namespace lge
 namespace
 {
 
+// Gamepad bindings match whichever pad satisfies them, so any connected pad works.
+template <typename Query>
+bool anyGamepad(Query&& query)
+{
+	for (std::size_t pad = 0; pad < maxGamepads; ++pad)
+	{
+		if (query(pad))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool bindingDown(InputBinding const& binding, InputState const& input)
 {
-	return binding.device == InputBinding::Device::Keyboard ? input.isDown(binding.key) : input.isDown(binding.button);
+	switch (binding.device)
+	{
+	case InputBinding::Device::Keyboard:
+		return input.isDown(binding.key);
+	case InputBinding::Device::Mouse:
+		return input.isDown(binding.button);
+	case InputBinding::Device::GamepadButton:
+		return anyGamepad([&](std::size_t pad) { return input.isDown(binding.gamepadButton, pad); });
+	case InputBinding::Device::GamepadAxis:
+		return anyGamepad([&](std::size_t pad) { return input.isDown(binding.gamepadAxis, binding.direction, pad); });
+	}
+	return false;
 }
 
 bool bindingPressed(InputBinding const& binding, InputState const& input)
 {
-	return binding.device == InputBinding::Device::Keyboard ? input.wasPressed(binding.key) : input.wasPressed(binding.button);
+	switch (binding.device)
+	{
+	case InputBinding::Device::Keyboard:
+		return input.wasPressed(binding.key);
+	case InputBinding::Device::Mouse:
+		return input.wasPressed(binding.button);
+	case InputBinding::Device::GamepadButton:
+		return anyGamepad([&](std::size_t pad) { return input.wasPressed(binding.gamepadButton, pad); });
+	case InputBinding::Device::GamepadAxis:
+		return anyGamepad([&](std::size_t pad) { return input.wasPressed(binding.gamepadAxis, binding.direction, pad); });
+	}
+	return false;
 }
 
 bool bindingReleased(InputBinding const& binding, InputState const& input)
 {
-	return binding.device == InputBinding::Device::Keyboard ? input.wasReleased(binding.key) : input.wasReleased(binding.button);
+	switch (binding.device)
+	{
+	case InputBinding::Device::Keyboard:
+		return input.wasReleased(binding.key);
+	case InputBinding::Device::Mouse:
+		return input.wasReleased(binding.button);
+	case InputBinding::Device::GamepadButton:
+		return anyGamepad([&](std::size_t pad) { return input.wasReleased(binding.gamepadButton, pad); });
+	case InputBinding::Device::GamepadAxis:
+		return anyGamepad([&](std::size_t pad) { return input.wasReleased(binding.gamepadAxis, binding.direction, pad); });
+	}
+	return false;
+}
+
+double bindingValue(InputBinding const& binding, InputState const& input)
+{
+	if (binding.device != InputBinding::Device::GamepadAxis)
+	{
+		return bindingDown(binding, input) ? 1.0 : 0.0;
+	}
+	double best = 0.0;
+	for (std::size_t pad = 0; pad < maxGamepads; ++pad)
+	{
+		double const raw = input.gamepadAxis(binding.gamepadAxis, pad);
+		double const directed = binding.direction == AxisDirection::Positive ? raw : -raw;
+		best = std::max(best, directed);
+	}
+	return best;
 }
 
 }
@@ -102,6 +165,20 @@ ActionId ActionMap::bind(std::string_view const name, MouseButton const button)
 	return id;
 }
 
+ActionId ActionMap::bind(std::string_view const name, GamepadButton const button)
+{
+	ActionId const id = define(name);
+	bind(id, InputBinding::fromGamepad(button));
+	return id;
+}
+
+ActionId ActionMap::bind(std::string_view const name, GamepadAxis const axis, AxisDirection const direction)
+{
+	ActionId const id = define(name);
+	bind(id, InputBinding::fromGamepadAxis(axis, direction));
+	return id;
+}
+
 void ActionMap::clearBindings(ActionId const id)
 {
 	if (id.value >= actions_.size())
@@ -143,18 +220,19 @@ bool ActionMap::wasReleased(ActionId const id, InputState const& input) const
 		});
 }
 
+double ActionMap::value(ActionId const id, InputState const& input) const
+{
+	double best = 0.0;
+	for (InputBinding const& binding : action(id).bindings)
+	{
+		best = std::max(best, bindingValue(binding, input));
+	}
+	return best;
+}
+
 double ActionMap::axis(ActionId const negative, ActionId const positive, InputState const& input) const
 {
-	double value = 0.0;
-	if (isActive(negative, input))
-	{
-		value -= 1.0;
-	}
-	if (isActive(positive, input))
-	{
-		value += 1.0;
-	}
-	return value;
+	return std::clamp(value(positive, input) - value(negative, input), -1.0, 1.0);
 }
 
 ActionMap::Action const& ActionMap::action(ActionId const id) const

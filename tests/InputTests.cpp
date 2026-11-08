@@ -172,6 +172,74 @@ TestCase const rebinding {"ActionMap: bindings can be replaced without touching 
 			}, "empty name throws");
 	}};
 
+TestCase const gamepadButtons {"InputState: gamepad button edges and disconnect release", []
+	{
+		InputState input;
+		check(!input.isGamepadConnected(), "starts disconnected");
+		input.setGamepadConnected(0, true);
+		input.setGamepadButtonDown(0, GamepadButton::A, true);
+		input.beginTick();
+		check(input.isGamepadConnected(), "connected");
+		check(input.wasPressed(GamepadButton::A), "pressed edge");
+		check(!input.isDown(GamepadButton::A, 1), "other slot unaffected");
+		input.beginTick();
+		check(!input.wasPressed(GamepadButton::A), "edge is one tick");
+		input.setGamepadConnected(0, false);
+		input.beginTick();
+		check(input.wasReleased(GamepadButton::A), "disconnect releases held button");
+		check(!input.isDown(GamepadButton::A), "no stuck button");
+		input.setGamepadButtonDown(maxGamepads, GamepadButton::A, true);
+		check(!input.isGamepadConnected(maxGamepads), "out-of-range slot ignored");
+	}};
+
+TestCase const gamepadAxes {"InputState: deadzone, radial stick and axis-as-button", []
+	{
+		InputState input;
+		input.setGamepadConnected(0, true);
+		input.setGamepadAxis(0, GamepadAxis::LeftX, 0.1);
+		checkNear(input.gamepadAxis(GamepadAxis::LeftX), 0.0, 0.0, "inside deadzone");
+		input.setGamepadAxis(0, GamepadAxis::LeftX, 1.0);
+		checkNear(input.gamepadAxis(GamepadAxis::LeftX), 1.0, 1e-12, "full deflection reaches 1");
+		input.setGamepadAxis(0, GamepadAxis::LeftX, -5.0);
+		checkNear(input.gamepadAxis(GamepadAxis::LeftX), -1.0, 1e-12, "clamped");
+		input.setGamepadAxis(0, GamepadAxis::LeftX, 0.0);
+		input.setGamepadAxis(0, GamepadAxis::LeftX, 1.0);
+		input.setGamepadAxis(0, GamepadAxis::LeftY, 1.0);
+		double const length = glm::length(input.gamepadStick(GamepadStick::Left));
+		checkNear(length, 1.0, 1e-12, "diagonal stick length is capped at 1");
+		input.beginTick();
+		check(input.wasPressed(GamepadAxis::LeftX, AxisDirection::Positive), "axis crosses threshold");
+		check(!input.isDown(GamepadAxis::LeftX, AxisDirection::Negative), "opposite direction idle");
+		input.setGamepadAxis(0, GamepadAxis::LeftX, 0.0);
+		input.beginTick();
+		check(input.wasReleased(GamepadAxis::LeftX, AxisDirection::Positive), "axis release edge");
+	}};
+
+TestCase const gamepadActions {"ActionMap: gamepad bindings and analog axis", []
+	{
+		ActionMap actions;
+		ActionId const jump = actions.bind("Jump", Key::Space);
+		actions.bind("Jump", GamepadButton::A);
+		ActionId const fire = actions.bind("Fire", GamepadAxis::RightTrigger, AxisDirection::Positive);
+		ActionId const left = actions.bind("Left", Key::A);
+		actions.bind("Left", GamepadAxis::LeftX, AxisDirection::Negative);
+		ActionId const right = actions.bind("Right", Key::D);
+		actions.bind("Right", GamepadAxis::LeftX, AxisDirection::Positive);
+
+		InputState input;
+		input.setGamepadConnected(1, true);
+		input.setGamepadButtonDown(1, GamepadButton::A, true);
+		input.setGamepadAxis(1, GamepadAxis::RightTrigger, 1.0);
+		input.setGamepadAxis(1, GamepadAxis::LeftX, -0.6);
+		input.beginTick();
+		check(actions.wasTriggered(jump, input), "button on any pad triggers");
+		check(actions.wasTriggered(fire, input), "trigger acts as a button");
+		double const move = actions.axis(left, right, input);
+		check(move < -0.1 && move > -1.0, "analog value is partial, not snapped to -1");
+		input.setKeyDown(Key::A, true);
+		checkNear(actions.axis(left, right, input), -1.0, 0.0, "keyboard still gives full value");
+	}};
+
 TestCase const keyNames {"Input: key names", []
 	{
 		check(keyName(Key::W) == "W", "W");

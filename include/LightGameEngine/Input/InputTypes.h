@@ -48,8 +48,59 @@ enum class MouseButton : std::uint8_t
 	Count
 };
 
+// Standard gamepad layout (Xbox naming; PlayStation/Switch pads are mapped onto it by
+// the platform layer). The order matches GLFW's gamepad button order.
+enum class GamepadButton : std::uint8_t
+{
+	A = 0,
+	B,
+	X,
+	Y,
+	LeftBumper,
+	RightBumper,
+	Back,
+	Start,
+	Guide,
+	LeftStick,
+	RightStick,
+	DpadUp,
+	DpadRight,
+	DpadDown,
+	DpadLeft,
+	Count
+};
+
+// Sticks report -1..+1 with +X right and +Y up. Triggers report 0 (released) to 1.
+enum class GamepadAxis : std::uint8_t
+{
+	LeftX = 0,
+	LeftY,
+	RightX,
+	RightY,
+	LeftTrigger,
+	RightTrigger,
+	Count
+};
+
+enum class AxisDirection : std::uint8_t
+{
+	Negative = 0,
+	Positive
+};
+
+enum class GamepadStick : std::uint8_t
+{
+	Left = 0,
+	Right
+};
+
 inline constexpr std::size_t keyCount = static_cast<std::size_t>(Key::Count);
 inline constexpr std::size_t mouseButtonCount = static_cast<std::size_t>(MouseButton::Count);
+
+inline constexpr std::size_t gamepadButtonCount = static_cast<std::size_t>(GamepadButton::Count);
+inline constexpr std::size_t gamepadAxisCount = static_cast<std::size_t>(GamepadAxis::Count);
+// Number of simultaneously tracked gamepads (slot 0 is the first connected pad).
+inline constexpr std::size_t maxGamepads = 4;
 
 [[nodiscard]] std::string_view keyName(Key key) noexcept;
 

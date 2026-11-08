@@ -677,6 +677,48 @@ double LightVulkanBackend::timeSeconds() const
 	return glfwGetTime();
 }
 
+namespace
+{
+
+// GLFW numbers gamepad buttons and axes identically to GamepadButton / GamepadAxis, so
+// the translation is an index cast. Only joysticks with a gamepad mapping count; a
+// device GLFW cannot map to the standard layout is reported as disconnected.
+void pollGamepads(InputState& input)
+{
+	static_assert(GLFW_GAMEPAD_BUTTON_LAST + 1 == static_cast<int>(gamepadButtonCount));
+	static_assert(GLFW_GAMEPAD_AXIS_LAST + 1 == static_cast<int>(gamepadAxisCount));
+	for (std::size_t pad = 0; pad < maxGamepads; ++pad)
+	{
+		int const jid = GLFW_JOYSTICK_1 + static_cast<int>(pad);
+		GLFWgamepadstate state {};
+		if (glfwJoystickIsGamepad(jid) != GLFW_TRUE || glfwGetGamepadState(jid, &state) != GLFW_TRUE)
+		{
+			input.setGamepadConnected(pad, false);
+			continue;
+		}
+		input.setGamepadConnected(pad, true);
+		for (std::size_t button = 0; button < gamepadButtonCount; ++button)
+		{
+			input.setGamepadButtonDown(pad, static_cast<GamepadButton>(button), state.buttons[button] == GLFW_PRESS);
+		}
+		for (std::size_t axis = 0; axis < gamepadAxisCount; ++axis)
+		{
+			double value = state.axes[axis];
+			if (axis == static_cast<std::size_t>(GamepadAxis::LeftY) || axis == static_cast<std::size_t>(GamepadAxis::RightY))
+			{
+				value = -value; // GLFW reports stick-up as negative; the engine uses +Y up.
+			}
+			else if (axis == static_cast<std::size_t>(GamepadAxis::LeftTrigger) || axis == static_cast<std::size_t>(GamepadAxis::RightTrigger))
+			{
+				value = (value + 1.0) * 0.5; // GLFW triggers span -1 (released) to +1.
+			}
+			input.setGamepadAxis(pad, static_cast<GamepadAxis>(axis), value);
+		}
+	}
+}
+
+}
+
 void LightVulkanBackend::pollInput(InputState& input)
 {
 	GLFWwindow* const window = impl_->window;
@@ -690,7 +732,20 @@ void LightVulkanBackend::pollInput(InputState& input)
 	double x = 0.0;
 	double y = 0.0;
 	glfwGetCursorPos(window, &x, &y);
+	// GLFW reports the cursor in window (screen) coordinates, but InputState promises
+	// framebuffer pixels, the space screen text and picking use. The two differ when the
+	// platform scales windows (HiDPI), so rescale by the framebuffer-to-window ratio.
+	int windowWidth = 0;
+	int windowHeight = 0;
+	glfwGetWindowSize(window, &windowWidth, &windowHeight);
+	WindowExtent const extent = framebufferExtent();
+	if (windowWidth > 0 && windowHeight > 0 && extent.width > 0 && extent.height > 0)
+	{
+		x *= static_cast<double>(extent.width) / windowWidth;
+		y *= static_cast<double>(extent.height) / windowHeight;
+	}
 	input.setMousePosition(glm::dvec2 {x, y});
+	pollGamepads(input);
 	input.addMouseScroll(impl_->pendingScroll);
 	impl_->pendingScroll = 0.0;
 }

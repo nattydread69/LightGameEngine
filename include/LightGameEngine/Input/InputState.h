@@ -22,6 +22,7 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
 #include <bitset>
 
 namespace lge
@@ -46,9 +47,22 @@ public:
 	// of an unchanged level are ignored, so polling every frame is safe.
 	void setKeyDown(Key key, bool down) noexcept;
 	void setMouseButtonDown(MouseButton button, bool down) noexcept;
+	// Platform-facing: the cursor in framebuffer pixels from the top-left, the same
+	// space as IPlatform::framebufferExtent() and ScreenText positions.
 	void setMousePosition(glm::dvec2 const& positionPixels) noexcept;
 	// Platform-facing: accumulate wheel movement (positive = away from the user).
 	void addMouseScroll(double steps) noexcept;
+
+	// Platform-facing gamepad reports for slot `pad` (< maxGamepads; others are
+	// ignored). Disconnecting releases every held button and centres every axis, so
+	// gameplay sees the releases instead of a stuck input.
+	void setGamepadConnected(std::size_t pad, bool connected) noexcept;
+	void setGamepadButtonDown(std::size_t pad, GamepadButton button, bool down) noexcept;
+	// Raw value: sticks -1..+1 (+Y up), triggers 0..1. Out-of-range values are clamped.
+	void setGamepadAxis(std::size_t pad, GamepadAxis axis, double value) noexcept;
+	// Fraction of full deflection ignored around the centre; the rest is rescaled so
+	// output still reaches 1. Default 0.2.
+	void setGamepadDeadzone(double deadzone) noexcept;
 
 	// Engine-facing: publish pending edges to the next tick.
 	void beginTick() noexcept;
@@ -75,7 +89,42 @@ public:
 		return tickMouseDelta_;
 	}
 
+	// Gamepad queries. Slot 0 is the default so single-player code can ignore it.
+	[[nodiscard]] bool isGamepadConnected(std::size_t pad = 0) const noexcept;
+	[[nodiscard]] bool isDown(GamepadButton button, std::size_t pad = 0) const noexcept;
+	[[nodiscard]] bool wasPressed(GamepadButton button, std::size_t pad = 0) const noexcept;
+	[[nodiscard]] bool wasReleased(GamepadButton button, std::size_t pad = 0) const noexcept;
+	// Axis value with the deadzone applied.
+	[[nodiscard]] double gamepadAxis(GamepadAxis axis, std::size_t pad = 0) const noexcept;
+	// Stick with a circular deadzone, so diagonals are not squashed. Length <= 1.
+	[[nodiscard]] glm::dvec2 gamepadStick(GamepadStick stick, std::size_t pad = 0) const noexcept;
+	// An axis pushed past half deflection in one direction acts as a button (e.g.
+	// a trigger as "Fire", a stick as a menu cursor) with the same edge semantics.
+	[[nodiscard]] bool isDown(GamepadAxis axis, AxisDirection direction, std::size_t pad = 0) const noexcept;
+	[[nodiscard]] bool wasPressed(GamepadAxis axis, AxisDirection direction, std::size_t pad = 0) const noexcept;
+	[[nodiscard]] bool wasReleased(GamepadAxis axis, AxisDirection direction, std::size_t pad = 0) const noexcept;
+
 private:
+	// Buttons first, then one virtual button per axis direction.
+	static constexpr std::size_t gamepadInputCount = gamepadButtonCount + gamepadAxisCount * 2;
+
+	struct Gamepad
+	{
+		bool connected = false;
+		std::bitset<gamepadInputCount> down;
+		std::bitset<gamepadInputCount> pendingPresses;
+		std::bitset<gamepadInputCount> pendingReleases;
+		std::bitset<gamepadInputCount> tickPresses;
+		std::bitset<gamepadInputCount> tickReleases;
+		std::array<double, gamepadAxisCount> axes {};
+	};
+
+	void setGamepadInput(Gamepad& gamepad, std::size_t index, bool down) noexcept;
+	[[nodiscard]] double deadzoned(double value) const noexcept;
+
+	std::array<Gamepad, maxGamepads> gamepads_;
+	double gamepadDeadzone_ = 0.2;
+
 	std::bitset<keyCount> keysDown_;
 	std::bitset<keyCount> pendingKeyPresses_;
 	std::bitset<keyCount> pendingKeyReleases_;

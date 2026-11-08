@@ -47,21 +47,50 @@ struct InputBinding
 	enum class Device : std::uint8_t
 	{
 		Keyboard,
-		Mouse
+		Mouse,
+		GamepadButton,
+		// An axis pushed past half deflection in `direction`; also feeds action values.
+		GamepadAxis
 	};
 
 	Device device = Device::Keyboard;
 	Key key = Key::Unknown;
 	MouseButton button = MouseButton::Left;
+	lge::GamepadButton gamepadButton = lge::GamepadButton::A;
+	lge::GamepadAxis gamepadAxis = lge::GamepadAxis::LeftX;
+	AxisDirection direction = AxisDirection::Positive;
 
 	[[nodiscard]] static constexpr InputBinding fromKey(Key const key) noexcept
 	{
-		return InputBinding {Device::Keyboard, key, MouseButton::Left};
+		InputBinding binding;
+		binding.device = Device::Keyboard;
+		binding.key = key;
+		return binding;
 	}
 
 	[[nodiscard]] static constexpr InputBinding fromMouse(MouseButton const button) noexcept
 	{
-		return InputBinding {Device::Mouse, Key::Unknown, button};
+		InputBinding binding;
+		binding.device = Device::Mouse;
+		binding.button = button;
+		return binding;
+	}
+
+	[[nodiscard]] static constexpr InputBinding fromGamepad(lge::GamepadButton const button) noexcept
+	{
+		InputBinding binding;
+		binding.device = Device::GamepadButton;
+		binding.gamepadButton = button;
+		return binding;
+	}
+
+	[[nodiscard]] static constexpr InputBinding fromGamepadAxis(lge::GamepadAxis const axis, AxisDirection const direction) noexcept
+	{
+		InputBinding binding;
+		binding.device = Device::GamepadAxis;
+		binding.gamepadAxis = axis;
+		binding.direction = direction;
+		return binding;
 	}
 
 	friend constexpr bool operator==(InputBinding const&, InputBinding const&) noexcept = default;
@@ -86,16 +115,25 @@ public:
 	void bind(ActionId action, InputBinding binding);
 	ActionId bind(std::string_view name, Key key);
 	ActionId bind(std::string_view name, MouseButton button);
+	ActionId bind(std::string_view name, GamepadButton button);
+	ActionId bind(std::string_view name, GamepadAxis axis, AxisDirection direction);
 	void clearBindings(ActionId action);
 	[[nodiscard]] std::vector<InputBinding> const& bindings(ActionId action) const;
 
+	// Gamepad bindings match any connected gamepad. Axis bindings act as buttons past
+	// half deflection.
 	// True while any binding is held.
 	[[nodiscard]] bool isActive(ActionId action, InputState const& input) const;
 	// True in the tick in which any binding was pressed.
 	[[nodiscard]] bool wasTriggered(ActionId action, InputState const& input) const;
 	// True in the tick in which any binding was released.
 	[[nodiscard]] bool wasReleased(ActionId action, InputState const& input) const;
-	// -1, 0 or +1 from a pair of opposing actions; both held cancel out.
+	// Strength of the action in 0..1: 1 for a held key or button, the deadzoned
+	// deflection for an axis binding. The strongest binding wins.
+	[[nodiscard]] double value(ActionId action, InputState const& input) const;
+	// From a pair of opposing actions: positive minus negative value, clamped to
+	// -1..+1. Keys give exactly -1, 0 or +1 (both held cancel out); gamepad axes
+	// give analog values.
 	[[nodiscard]] double axis(ActionId negative, ActionId positive, InputState const& input) const;
 
 private:
