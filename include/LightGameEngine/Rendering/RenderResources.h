@@ -38,7 +38,9 @@ enum class PrimitiveShape : std::uint8_t
 	Sphere,
 	Cylinder,
 	Cone,
-	Capsule
+	Capsule,
+	// Hexagonal prism, 1 tall along +Y, filling the same unit footprint as a cylinder.
+	Hex
 };
 
 struct MeshVertex

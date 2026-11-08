@@ -22,10 +22,10 @@ class IRenderer
   stale-handle detection in every backend.
 - **`RenderScene`** is a per-frame snapshot: a `RenderCamera`, a `RenderEnvironment`
   (clear colour, ambient light), `RenderObject`s (stable id, mesh, material,
-  interpolated world transform in double precision), `RenderLight`s and `ScreenText`
-  overlays. It holds no GPU data, and `GameEngine` reuses one instance so its vectors are
+  interpolated world transform in double precision), `RenderLight`s (with optional shadow tuning and a pinned shadow centre) and `ScreenText`
+  overlays (optionally on a translucent background panel). It holds no GPU data, and `GameEngine` reuses one instance so its vectors are
   not reallocated every frame.
-- **Supported primitives:** cube, sphere, cylinder, cone and capsule, all unit-sized and
+- **Supported primitives:** cube, sphere, cylinder, cone, capsule and hex prism, all unit-sized and
   centred, scaled by the transform. **Custom meshes** are indexed triangle lists with
   per-vertex position, normal and colour, validated by `validateMeshData()` in every
   backend.

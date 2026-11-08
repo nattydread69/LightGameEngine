@@ -104,6 +104,16 @@ TestCase const mouseState {"InputState: mouse buttons, position and delta", []
 		checkNear(input.mousePosition().x, 110.0, 0.0, "position kept");
 	}};
 
+TestCase const mouseScroll {"InputState: wheel steps accumulate until taken", []
+	{
+		InputState input;
+		input.addMouseScroll(1.0);
+		input.addMouseScroll(-0.25);
+		input.beginTick();
+		checkNear(input.takeMouseScroll(), 0.75, 1e-12, "accumulated across ticks, not cleared by beginTick");
+		checkNear(input.takeMouseScroll(), 0.0, 0.0, "cleared once taken");
+	}};
+
 TestCase const actionMapping {"ActionMap: actions map to multiple bindings", []
 	{
 		ActionMap actions;

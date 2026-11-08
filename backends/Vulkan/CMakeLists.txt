@@ -1,6 +1,6 @@
 # The only engine target that depends on Vulkan, GLFW and LightVulkanGraphics. Those
 # dependencies are PRIVATE: consumers of LightGame::RendererVulkan see engine types only.
-add_library(LightGameRendererVulkan STATIC
+add_library(LightGameRendererVulkan
 	src/LightVulkanBackend.cpp
 	src/GlfwKeyMap.h)
 add_library(LightGame::RendererVulkan ALIAS LightGameRendererVulkan)

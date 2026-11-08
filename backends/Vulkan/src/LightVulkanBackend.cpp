@@ -83,6 +83,8 @@ lg::ShapeType toShape(PrimitiveShape const shape)
 		return lg::ShapeType::CONE;
 	case PrimitiveShape::Capsule:
 		return lg::ShapeType::CAPSULE;
+	case PrimitiveShape::Hex:
+		return lg::ShapeType::HEX;
 	}
 	return lg::ShapeType::CUBE;
 }
@@ -163,6 +165,29 @@ struct PendingMeshRelease
 	std::uint64_t releaseFrame;
 };
 
+// GLFW reports the wheel only through a callback with no user data (the window user
+// pointer belongs to LightVulkanGraphics), so the one live backend is reached through
+// this pointer. The callback forwards every event to the callback it replaced.
+struct ScrollRelay
+{
+	double* accumulator = nullptr;
+	GLFWscrollfun previous = nullptr;
+};
+
+ScrollRelay scrollRelay;
+
+void scrollThunk(GLFWwindow* const window, double const xOffset, double const yOffset)
+{
+	if (scrollRelay.accumulator != nullptr)
+	{
+		*scrollRelay.accumulator += yOffset;
+	}
+	if (scrollRelay.previous != nullptr)
+	{
+		scrollRelay.previous(window, xOffset, yOffset);
+	}
+}
+
 }
 
 struct LightVulkanBackend::Impl
@@ -197,6 +222,8 @@ struct LightVulkanBackend::Impl
 	std::uint64_t frameNumber = 0;
 	RenderStatistics statistics;
 	std::uint32_t screenshotsWritten = 0;
+	double pendingScroll = 0.0;
+	bool scrollHooked = false;
 
 	glm::vec3 relative(glm::dvec3 const& world) const
 	{
@@ -484,7 +511,18 @@ struct LightVulkanBackend::Impl
 			source.innerConeAngleRadians = light.innerConeRadians;
 			source.outerConeAngleRadians = light.outerConeRadians;
 			source.castsShadow = light.castsShadow;
-			graphics->addLight(source);
+			if (light.castsShadow)
+			{
+				if (light.shadowStrength > 0.0f) source.shadowStrength = light.shadowStrength;
+				if (light.shadowOrthographicSize > 0.0f) source.shadowOrthoSize = light.shadowOrthographicSize;
+				if (light.shadowFar > 0.0f) source.shadowFar = light.shadowFar;
+				if (light.shadowMapSize > 0) source.shadowMapSize = light.shadowMapSize;
+			}
+			std::size_t const lightIndex = graphics->addLight(source);
+			if (light.castsShadow && light.shadowCenterPinned)
+			{
+				graphics->setLightShadowCenter(lightIndex, relative(light.shadowCenter));
+			}
 		}
 		submittedLights = lights;
 		submittedLightOrigin = renderOrigin;
@@ -502,7 +540,8 @@ struct LightVulkanBackend::Impl
 				TextSlot& slot = textSlots[found->second];
 				slot.lastSeenFrame = frameNumber;
 				if (slot.last.text != text.text || slot.last.positionPixels != text.positionPixels ||
-					slot.last.scale != text.scale || slot.last.color != text.color)
+					slot.last.scale != text.scale || slot.last.color != text.color ||
+						slot.last.background != text.background || slot.last.backgroundColor != text.backgroundColor)
 				{
 					graphics->updateScreenText(slot.handle, describe(text, slot.capacity));
 					slot.last = text;
@@ -548,6 +587,8 @@ struct LightVulkanBackend::Impl
 		description.color = text.color;
 		description.maximumCharacters = capacity;
 		description.visible = true;
+		description.backgroundEnabled = text.background;
+		description.backgroundColor = text.backgroundColor;
 		return description;
 	}
 };
@@ -590,9 +631,22 @@ LightVulkanBackend::LightVulkanBackend(LightVulkanBackendConfig const& config)
 	// than one frame is still reported.
 	glfwSetInputMode(impl_->window, GLFW_STICKY_KEYS, GLFW_TRUE);
 	glfwSetInputMode(impl_->window, GLFW_STICKY_MOUSE_BUTTONS, GLFW_TRUE);
+	if (scrollRelay.accumulator == nullptr)
+	{
+		scrollRelay.accumulator = &impl_->pendingScroll;
+		scrollRelay.previous = glfwSetScrollCallback(impl_->window, &scrollThunk);
+		impl_->scrollHooked = true;
+	}
 }
 
-LightVulkanBackend::~LightVulkanBackend() = default;
+LightVulkanBackend::~LightVulkanBackend()
+{
+	if (impl_->scrollHooked)
+	{
+		glfwSetScrollCallback(impl_->window, scrollRelay.previous);
+		scrollRelay = {};
+	}
+}
 
 void LightVulkanBackend::run(FrameFunction const& frame)
 {
@@ -637,6 +691,8 @@ void LightVulkanBackend::pollInput(InputState& input)
 	double y = 0.0;
 	glfwGetCursorPos(window, &x, &y);
 	input.setMousePosition(glm::dvec2 {x, y});
+	input.addMouseScroll(impl_->pendingScroll);
+	impl_->pendingScroll = 0.0;
 }
 
 WindowExtent LightVulkanBackend::framebufferExtent() const

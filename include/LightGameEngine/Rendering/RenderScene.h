@@ -89,6 +89,15 @@ struct RenderLight
 	float innerConeRadians = 0.35f;
 	float outerConeRadians = 0.5f;
 	bool castsShadow = false;
+	// Shadow tuning, used only when castsShadow is set. Zero keeps the backend default.
+	float shadowStrength = 0.0f;
+	float shadowOrthographicSize = 0.0f;
+	float shadowFar = 0.0f;
+	std::uint32_t shadowMapSize = 0;
+	// Directional lights: fixes the shadow volume's centre instead of following the
+	// visible objects. Used when shadowCenterPinned is set.
+	glm::dvec3 shadowCenter {0.0};
+	bool shadowCenterPinned = false;
 
 	friend bool operator==(RenderLight const&, RenderLight const&) = default;
 };
@@ -101,6 +110,9 @@ struct ScreenText
 	glm::vec2 positionPixels {16.0f, 16.0f};
 	float scale = 2.0f;
 	glm::vec4 color {1.0f};
+	// Translucent panel behind the text.
+	bool background = false;
+	glm::vec4 backgroundColor {0.0f, 0.0f, 0.0f, 0.6f};
 };
 
 struct RenderEnvironment

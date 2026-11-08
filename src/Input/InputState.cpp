@@ -78,6 +78,18 @@ void InputState::setMousePosition(glm::dvec2 const& positionPixels) noexcept
 	hasMousePosition_ = true;
 }
 
+void InputState::addMouseScroll(double const steps) noexcept
+{
+	pendingScroll_ += steps;
+}
+
+double InputState::takeMouseScroll() noexcept
+{
+	double const steps = pendingScroll_;
+	pendingScroll_ = 0.0;
+	return steps;
+}
+
 void InputState::beginTick() noexcept
 {
 	tickKeyPresses_ = pendingKeyPresses_;

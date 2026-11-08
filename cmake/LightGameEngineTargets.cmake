@@ -29,7 +29,9 @@ endfunction()
 # Declares an engine library whose public headers live under include/.
 function(lge_add_library target alias)
 	cmake_parse_arguments(ARG "" "" "SOURCES;PUBLIC_DEPS;PRIVATE_DEPS" ${ARGN})
-	add_library(${target} STATIC ${ARG_SOURCES})
+	# No STATIC keyword: BUILD_SHARED_LIBS decides, so a game bound by a no-static-LGPL
+	# rule can build the engine as shared libraries.
+	add_library(${target} ${ARG_SOURCES})
 	add_library(LightGame::${alias} ALIAS ${target})
 	target_include_directories(${target} PUBLIC
 		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)

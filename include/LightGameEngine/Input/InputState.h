@@ -47,6 +47,8 @@ public:
 	void setKeyDown(Key key, bool down) noexcept;
 	void setMouseButtonDown(MouseButton button, bool down) noexcept;
 	void setMousePosition(glm::dvec2 const& positionPixels) noexcept;
+	// Platform-facing: accumulate wheel movement (positive = away from the user).
+	void addMouseScroll(double steps) noexcept;
 
 	// Engine-facing: publish pending edges to the next tick.
 	void beginTick() noexcept;
@@ -64,6 +66,9 @@ public:
 	{
 		return mousePosition_;
 	}
+	// Wheel movement accumulated since the last call, which clears it. Unlike key
+	// edges it is not tied to beginTick(), so frame-rate camera zoom can use it.
+	[[nodiscard]] double takeMouseScroll() noexcept;
 	// Mouse movement accumulated since the previous tick, in pixels.
 	[[nodiscard]] glm::dvec2 mouseDelta() const noexcept
 	{
@@ -86,6 +91,7 @@ private:
 	glm::dvec2 mousePosition_ {0.0};
 	glm::dvec2 pendingMouseDelta_ {0.0};
 	glm::dvec2 tickMouseDelta_ {0.0};
+	double pendingScroll_ = 0.0;
 	bool hasMousePosition_ = false;
 };
 
