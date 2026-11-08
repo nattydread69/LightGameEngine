@@ -141,4 +141,11 @@ See [docs/getting-started.md](docs/getting-started.md) for a complete minimal ga
 
 ## Licence
 
-Not yet chosen. LightVulkanGraphics is LGPL-3.0-or-later; the engine links to it dynamically.
+Light Game Engine is free software, licensed under the GNU Lesser General Public License,
+version 3 or (at your option) any later version (`LGPL-3.0-or-later`). See
+[COPYING.LESSER](COPYING.LESSER) for the LGPL and [COPYING](COPYING) for the GNU General
+Public License it builds on.
+
+Copyright (C) 2026 and onwards Dr. Nathanael John Inkson.
+
+LightVulkanGraphics is also LGPL-3.0-or-later; the engine links to it dynamically.
