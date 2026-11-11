@@ -45,3 +45,15 @@ lge_add_library(LightGameEngine Engine
 		Engine/GameEngine.cpp
 		Platform/HeadlessPlatform.cpp
 	PUBLIC_DEPS LightGame::Scene LightGame::AI)
+
+# Licensing is an independent subsystem and does not pull GUI or graphics dependencies.
+find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+lge_add_library(LightGameLicensing Licensing
+	SOURCES
+		Licensing/LicenseFeatures.cpp
+		Licensing/LicenseManager.cpp
+		Licensing/LicenseVerifier.cpp
+		Licensing/SteamLicense.cpp
+		Licensing/GumroadLicense.cpp
+		Licensing/StudioLicense.cpp
+	PUBLIC_DEPS OpenSSL::Crypto)

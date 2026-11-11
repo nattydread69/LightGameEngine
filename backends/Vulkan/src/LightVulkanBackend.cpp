@@ -589,6 +589,9 @@ struct LightVulkanBackend::Impl
 		description.visible = true;
 		description.backgroundEnabled = text.background;
 		description.backgroundColor = text.backgroundColor;
+		// Draw from the GUI's TrueType atlas when the library has one (the default).
+		description.useFontAtlas = true;
+		description.monospace = text.monospace;
 		return description;
 	}
 };

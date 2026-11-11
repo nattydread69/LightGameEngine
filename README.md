@@ -119,6 +119,10 @@ target_link_libraries(MyGame PRIVATE LightGame::Engine LightGame::RendererVulkan
 
 See [docs/getting-started.md](docs/getting-started.md) for a complete minimal game.
 
+## Licensing module
+
+The independent `LightGame::Licensing` target contains entitlement primitives for applications built on the engine. Its current integration boundaries and commercial readiness limitations are documented in [docs/licensing.md](docs/licensing.md).
+
 ## Current limitations
 
 - **Rendering features** are those LightVulkanGraphics provides: lit/unlit instanced

@@ -113,6 +113,9 @@ struct ScreenText
 	// Translucent panel behind the text.
 	bool background = false;
 	glm::vec4 backgroundColor {0.0f, 0.0f, 0.0f, 0.6f};
+	// Use the renderer's monospace face (fixed-width columns). Fixed for the life of the
+	// id: the backend reads it when the text is first created.
+	bool monospace = false;
 };
 
 struct RenderEnvironment
