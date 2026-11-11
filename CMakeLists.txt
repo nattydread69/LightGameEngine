@@ -8,6 +8,7 @@ project(LightGameEngine
 # Only the Vulkan backend needs LightVulkanGraphics; everything else builds and
 # tests headlessly.
 option(LGE_BUILD_VULKAN_BACKEND "Build the LightVulkanGraphics renderer backend and graphical examples" ON)
+option(LGE_BUILD_DESKTOP_BRIDGE "Build the LVG desktop application bridge" OFF)
 # Examples and tests default to off when the engine is embedded in a game's own build
 # with add_subdirectory().
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
@@ -32,6 +33,11 @@ include(LightGameEngineDependencies)
 
 add_subdirectory(src)
 add_subdirectory(backends/Null)
+
+if(LGE_BUILD_DESKTOP_BRIDGE)
+	find_package(LightVulkanGraphics 3.2 CONFIG REQUIRED COMPONENTS UI)
+	add_subdirectory(backends/Desktop)
+endif()
 
 if(LGE_BUILD_VULKAN_BACKEND)
 	lge_find_light_vulkan_graphics()

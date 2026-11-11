@@ -119,6 +119,15 @@ target_link_libraries(MyGame PRIVATE LightGame::Engine LightGame::RendererVulkan
 
 See [docs/getting-started.md](docs/getting-started.md) for a complete minimal game.
 
+Desktop tools already using LVG's scene and UI APIs can instead enable
+`LGE_BUILD_DESKTOP_BRIDGE` and link `LightGame::Desktop`. Include
+`LightGameEngine/Desktop/DesktopApplication.h` and use `lge::DesktopApplication`;
+it exposes the LVG application API and owns a licence manager accessible through
+`licensing()`. Supply providers in the constructor, or use the empty default for
+Free. This is an opt-in compatibility bridge with a public LVG/UI dependency; it
+does not run the `GameEngine` loop or translate LVG scenes to engine scenes.
+The bridge requires an installed LVG package with its UI component enabled.
+
 ## Licensing module
 
 The independent `LightGame::Licensing` target contains entitlement primitives for applications built on the engine. Its current integration boundaries and commercial readiness limitations are documented in [docs/licensing.md](docs/licensing.md).

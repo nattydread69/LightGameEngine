@@ -18,6 +18,14 @@ lge_add_test_suite(EngineTests EngineTests.cpp)
 lge_add_test_suite(LicensingTests LicensingTests.cpp)
 target_link_libraries(LicensingTests PRIVATE LightGame::Licensing)
 
+if(TARGET LightGame::Desktop)
+	add_executable(DesktopBridgeTests DesktopBridgeTests.cpp)
+	target_link_libraries(DesktopBridgeTests PRIVATE LightGame::Desktop)
+	lge_configure_target(DesktopBridgeTests)
+	add_test(NAME DesktopBridgeTests COMMAND DesktopBridgeTests)
+	set_tests_properties(DesktopBridgeTests PROPERTIES LABELS "headless;integration")
+endif()
+
 # Guards the layering rule: no engine header outside backends/Vulkan may mention Vulkan,
 # GLFW or LightVulkanGraphics.
 add_test(NAME ArchitectureNoVulkanInEngineHeaders
