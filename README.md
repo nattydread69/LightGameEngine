@@ -54,7 +54,12 @@ harness (`tests/TestHarness.h`), so tests need nothing extra.
 ```bash
 cmake -S . -B build -G Ninja          # or: cmake --preset default
 cmake --build build
+cmake --install build --prefix ./stage
 ```
+
+Engine libraries build as static archives by default. Set
+`-DBUILD_SHARED_LIBS=ON` when dynamic LGPL linking is required. Installation exports
+`LightGame::` CMake targets for downstream `find_package(LightGameEngine CONFIG)` use.
 
 Useful options:
 
@@ -147,7 +152,7 @@ The independent `LightGame::Licensing` target contains entitlement primitives fo
   macOS Retina displays. 3.3 provides the query and renders at native resolution.
 - **Not implemented yet:** audio, animation, controller input, fullscreen toggling,
   asynchronous asset loading, rigid-body dynamics, 3D collision, behaviour trees,
-  scene serialisation, an install/export package for the engine itself.
+  scene serialisation.
 - Three LightVulkanGraphics 3.2 issues (fixed in 3.3) are worked around in the adapter
   when building against 3.2; see
   [docs/rendering.md](docs/rendering.md#workarounds-for-lightvulkangraphics-32).

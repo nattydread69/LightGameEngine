@@ -13,7 +13,7 @@ namespace lge::licensing
 	class StudioLicense final : public ILicenseProvider
 	{
 	public:
-		StudioLicense(std::filesystem::path licenseFile, SignatureVerifier verifier);
+		StudioLicense(std::filesystem::path licenseFile, SignatureVerifier verifier, ProductIdentity expectedProduct = {});
 		LicenseProviderKind provider() const noexcept override;
 		bool available() const noexcept override;
 		LicenseResult check() override;
@@ -23,5 +23,6 @@ namespace lge::licensing
 	private:
 		std::filesystem::path licenseFile_;
 		SignatureVerifier verifier_;
+		ProductIdentity expectedProduct_;
 	};
 }

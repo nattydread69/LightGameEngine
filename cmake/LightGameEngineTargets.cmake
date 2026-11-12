@@ -33,8 +33,10 @@ function(lge_add_library target alias)
 	# rule can build the engine as shared libraries.
 	add_library(${target} ${ARG_SOURCES})
 	add_library(LightGame::${alias} ALIAS ${target})
+	set_target_properties(${target} PROPERTIES EXPORT_NAME ${alias})
 	target_include_directories(${target} PUBLIC
-		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 	target_link_libraries(${target} PUBLIC ${ARG_PUBLIC_DEPS} PRIVATE ${ARG_PRIVATE_DEPS})
 	lge_configure_target(${target})
 endfunction()

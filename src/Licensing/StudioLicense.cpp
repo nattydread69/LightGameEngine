@@ -6,13 +6,15 @@
 
 namespace lge::licensing
 {
-	StudioLicense::StudioLicense(std::filesystem::path path, SignatureVerifier verifier) : licenseFile_ {std::move(path)}, verifier_ {std::move(verifier)} {}
-	LicenseProviderKind StudioLicense::provider() const noexcept { return LicenseProviderKind::Studio; }
+	StudioLicense::StudioLicense(std::filesystem::path path, SignatureVerifier verifier, ProductIdentity expectedProduct)
+		: licenseFile_ {std::move(path)}, verifier_ {std::move(verifier)}, expectedProduct_ {std::move(expectedProduct)} {}
+	LicenseProviderKind StudioLicense::provider() const noexcept { return LicenseProviderKind::Signed; }
 	bool StudioLicense::available() const noexcept { return static_cast<bool>(verifier_); }
 	LicenseResult StudioLicense::check()
 	{
-		LicenseResult result {LicenseProviderKind::Studio, ProductEdition::Free, LicenseStatus::NotActivated};
+		LicenseResult result {LicenseProviderKind::Signed, ProductEdition::Free, LicenseStatus::NotActivated};
 		if (!available()) { result.status = LicenseStatus::Unavailable; return result; }
+		if (expectedProduct_.productId.empty()) { result.status = LicenseStatus::Unavailable; result.message = "Expected product identity is not configured"; return result; }
 		std::ifstream input {licenseFile_, std::ios::binary};
 		if (!input) return result;
 		std::string content {std::istreambuf_iterator<char> {input}, {}};
@@ -31,12 +33,16 @@ namespace lge::licensing
 		std::string const signature = field("signature");
 		if (payload.empty() || keyId.empty() || signature.empty() || !verifier_(keyId, payload, signature))
 		{ result.status = LicenseStatus::Invalid; result.message = "Studio licence signature is invalid"; return result; }
-		if (payload.find("\"product\":\"lightGameEngine\"") == std::string::npos || payload.find("\"edition\":\"Studio\"") == std::string::npos)
-		{ result.status = LicenseStatus::Invalid; result.message = "Studio licence identity is invalid"; return result; }
+		auto const productField = "\"product\":\"" + expectedProduct_.productId + "\"";
+		if (payload.find(productField) == std::string::npos || (!expectedProduct_.publisherId.empty() && payload.find("\"publisher\":\"" + expectedProduct_.publisherId + "\"") == std::string::npos))
+		{ result.status = LicenseStatus::Invalid; result.message = "Signed licence product identity does not match"; return result; }
+		std::string const edition = field("edition");
+		if (edition.empty()) { result.status = LicenseStatus::Invalid; result.message = "Signed licence edition is missing"; return result; }
 		result.status = LicenseStatus::Valid;
-		result.edition = ProductEdition::Studio;
-		result.licenseId = "signed-studio-license";
-		result.capabilities = featuresFor(ProductEdition::Studio);
+		result.editionId = edition;
+		result.productId = expectedProduct_.productId;
+		result.publisherId = expectedProduct_.publisherId;
+		result.licenseId = field("license_id");
 		result.lastVerifiedAt = std::chrono::system_clock::now();
 		return result;
 	}

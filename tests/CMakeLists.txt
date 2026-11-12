@@ -24,6 +24,11 @@ if(TARGET LightGame::Desktop)
 	lge_configure_target(DesktopBridgeTests)
 	add_test(NAME DesktopBridgeTests COMMAND DesktopBridgeTests)
 	set_tests_properties(DesktopBridgeTests PROPERTIES LABELS "headless;integration")
+	add_executable(FeedbackConfigTests FeedbackConfigTests.cpp)
+	target_link_libraries(FeedbackConfigTests PRIVATE LightGame::Desktop)
+	lge_configure_target(FeedbackConfigTests)
+	add_test(NAME FeedbackConfigTests COMMAND FeedbackConfigTests)
+	set_tests_properties(FeedbackConfigTests PROPERTIES LABELS "headless;unit")
 endif()
 
 # Guards the layering rule: no engine header outside backends/Vulkan may mention Vulkan,

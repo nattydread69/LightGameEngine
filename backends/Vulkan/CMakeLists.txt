@@ -4,8 +4,10 @@ add_library(LightGameRendererVulkan
 	src/LightVulkanBackend.cpp
 	src/GlfwKeyMap.h)
 add_library(LightGame::RendererVulkan ALIAS LightGameRendererVulkan)
+set_target_properties(LightGameRendererVulkan PROPERTIES EXPORT_NAME RendererVulkan)
 target_include_directories(LightGameRendererVulkan
 	PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+		$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 	PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(LightGameRendererVulkan
 	PUBLIC LightGame::Rendering LightGame::Core

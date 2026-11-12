@@ -53,6 +53,7 @@ lge_add_library(LightGameLicensing Licensing
 		Licensing/LicenseFeatures.cpp
 		Licensing/LicenseManager.cpp
 		Licensing/LicenseVerifier.cpp
+		Licensing/SignedLicense.cpp
 		Licensing/SteamLicense.cpp
 		Licensing/GumroadLicense.cpp
 		Licensing/StudioLicense.cpp
