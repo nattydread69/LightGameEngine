@@ -2,7 +2,7 @@
 
 `LightGame::Desktop` provides `lge::FeedbackForm`. It displays a category drop down,
 an optional reply address, a message field, and Send/Close buttons. The default
-categories are Bug report, Feature request, and Feedback. A concrete application
+categories are Bug report, Feature request, Feedback, and Crash report. A concrete application
 may replace the whole category list in `FeedbackConfig`.
 
 Build with `-DLGE_BUILD_DESKTOP_BRIDGE=ON` and link `LightGame::Desktop`. Configure
@@ -60,5 +60,34 @@ message stays in the form for a retry. Do not embed an SMTP password in a shippe
 binary; read it from a secure runtime source or provide a server-side relay under
 the application's control.
 
-The underlying UI library currently has a single-line `TextBox`. The message
-field accepts up to 4000 characters and scrolls horizontally during editing.
+## Automatic crash reports
+
+Wrap the concrete application's top-level work, including initialization, in
+`runWithCrashReporting`. It sends exceptions that escape the callable using the same
+SMTP settings, with the subject category `Crash report`, then rethrows the original
+exception for the application's normal error handling. Keep the configuration alive
+outside the callable. Set the one `crashReportingEnabled` variable to `false` to
+disable automatic reports; it defaults to `true` when the wrapper is used.
+
+```cpp
+auto config = lge::FeedbackConfig::fromEnvironment("MYAPP_FEEDBACK", defaults);
+config.crashReportingEnabled = true;
+try {
+    return lge::runWithCrashReporting(config, [&] {
+        return runMyApplication();
+    });
+} catch (std::exception const& error) {
+    // Log or display error.what() and return a failure code.
+    return 1;
+}
+```
+
+Reports contain the application name and exception message (or an indication that
+the exception is not a standard exception). Delivery is best effort and synchronous,
+with the same 30-second timeout as feedback. SMTP must be configured and credentials
+available. This catches exceptions on the wrapped thread; fatal signals, process
+termination, and exceptions on other threads are not captured. Exception messages
+may contain sensitive information, so applications should consider what they expose.
+
+The message field is a multi-line, word-wrapped `TextArea` (Enter inserts a newline)
+limited to 4000 bytes; longer messages are refused with a status message.

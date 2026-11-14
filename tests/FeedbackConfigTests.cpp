@@ -7,6 +7,8 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <algorithm>
+#include <stdexcept>
 
 namespace {
 int failures = 0;
@@ -21,6 +23,8 @@ int main() {
 	check(!FeedbackConfig{}.isConfigured(), "empty config is not configured");
 
 	FeedbackConfig defaults;
+	check(std::find(defaults.categories.begin(), defaults.categories.end(), "Crash report") != defaults.categories.end(),
+		"crash report category is available");
 	defaults.developerEmail = "dev@example.com";
 	defaults.senderEmail = "app@example.com";
 	defaults.smtpUrl = "smtps://mail.example.com:465";
@@ -47,6 +51,21 @@ int main() {
 	check(merged.smtpUsername == "user", "empty variable keeps default");
 	check(merged.senderEmail == "app@example.com", "unrelated default kept");
 	check(merged.categories == defaults.categories, "categories kept");
+
+	FeedbackConfig disabled;
+	disabled.crashReportingEnabled = false;
+	check(lge::sendCrashReport(disabled, {}).empty(), "disabled reporting skips delivery");
+	bool caught = false;
+	try {
+		lge::runWithCrashReporting(disabled, [] { throw std::runtime_error("original error"); });
+	} catch (std::runtime_error const& error) {
+		caught = std::string(error.what()) == "original error";
+	}
+	check(caught, "wrapper preserves the original exception");
+	check(lge::runWithCrashReporting(disabled, [] { return 42; }) == 42, "wrapper returns the application result");
+	FeedbackConfig invalid;
+	check(!lge::sendCrashReport(invalid, std::make_exception_ptr(std::runtime_error("failure"))).empty(),
+		"enabled reporting attempts delivery and returns configuration errors");
 
 	if (failures == 0) std::cout << "FeedbackConfigTests passed\n";
 	return failures == 0 ? 0 : 1;

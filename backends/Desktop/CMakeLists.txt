@@ -1,5 +1,7 @@
 find_package(CURL REQUIRED)
-add_library(LightGameDesktop STATIC src/FeedbackForm.cpp)
+# No STATIC keyword: BUILD_SHARED_LIBS decides, as for the engine libraries (lge_add_library), so an application can
+# link the desktop bridge as a shared library to meet the LGPL without relinking.
+add_library(LightGameDesktop src/FeedbackForm.cpp)
 add_library(LightGame::Desktop ALIAS LightGameDesktop)
 set_target_properties(LightGameDesktop PROPERTIES EXPORT_NAME Desktop)
 target_compile_features(LightGameDesktop PUBLIC cxx_std_20)

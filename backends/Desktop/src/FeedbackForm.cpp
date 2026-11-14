@@ -88,10 +88,13 @@ bool FeedbackConfig::isConfigured() const {
 
 namespace {
 
+constexpr std::size_t kMaxMessageBytes = 4000;
+
 std::string sendMail(FeedbackConfig config, std::string category,
 	std::string replyTo, std::string message) {
 	if (!validAddress(config.developerEmail) || !validAddress(config.senderEmail) ||
-		(!replyTo.empty() && !validAddress(replyTo)) || !validHeader(category))
+		(!replyTo.empty() && !validAddress(replyTo)) || !validHeader(category) ||
+		(!config.applicationName.empty() && !validHeader(config.applicationName)))
 		return "Invalid email address or category.";
 	if (config.smtpUrl.rfind("smtp://", 0) != 0 && config.smtpUrl.rfind("smtps://", 0) != 0)
 		return "Configure an SMTP or SMTPS server.";
@@ -148,6 +151,21 @@ std::string sendMail(FeedbackConfig config, std::string category,
 
 } // namespace
 
+std::string sendCrashReport(FeedbackConfig const& config, std::exception_ptr error) noexcept {
+	if (!config.crashReportingEnabled) return {};
+	try {
+		std::string message = "An exception escaped the application.\n";
+		if (error) {
+			try { std::rethrow_exception(error); }
+			catch (std::exception const& ex) { message += std::string("Exception: ") + ex.what(); }
+			catch (...) { message += "Exception: unknown non-standard exception"; }
+		} else message += "Exception details unavailable.";
+		return sendMail(config, "Crash report", {}, std::move(message));
+	} catch (...) {
+		return {};
+	}
+}
+
 FeedbackForm::FeedbackForm(lightGraphics::ui::GuiContext& gui, FeedbackConfig config)
 	: gui_(gui), config_(std::move(config)) {
 	if (config_.categories.empty())
@@ -156,14 +174,18 @@ FeedbackForm::FeedbackForm(lightGraphics::ui::GuiContext& gui, FeedbackConfig co
 		if (!validHeader(category)) throw std::invalid_argument("FeedbackForm has an invalid category");
 
 	namespace ui = lightGraphics::ui;
-	panel_ = gui_.createPanel("Send feedback", {80, 80, 440, 280});
+	panel_ = gui_.createPanel("Send feedback", {80, 80, 480, 470},
+		ui::PanelFlags::Default | ui::PanelFlags::Closable);
 	panel_->setVisible(false);
 	panel_->add<ui::Label>("Send your comments to the developer.")->setWordWrap(true);
 	category_ = panel_->add<ui::DropDown>("Category", config_.categories);
 	replyTo_ = panel_->add<ui::TextBox>("Your email (optional)");
 	replyTo_->setMaxLength(254);
-	message_ = panel_->add<ui::TextBox>("Message");
-	message_->setMaxLength(4000);
+	panel_->add<ui::Label>("Message");
+	message_ = panel_->add<ui::TextArea>();
+	message_->setWordWrap(true);
+	message_->setVisibleRows(8);
+	message_->setPlaceholder("Describe the problem or idea (Enter for a new line)");
 	status_ = panel_->add<ui::Label>("");
 	status_->setWordWrap(true);
 	panel_->add<ui::Button>("Send")->setOnClick([this] { send(); });
@@ -187,6 +209,10 @@ void FeedbackForm::send() {
 	std::string const message(message_->text());
 	if (message.empty()) {
 		status_->setText("Please enter a message.");
+		return;
+	}
+	if (message.size() > kMaxMessageBytes) {
+		status_->setText("Message is too long (limit 4000 characters).");
 		return;
 	}
 	status_->setText("Sending...");

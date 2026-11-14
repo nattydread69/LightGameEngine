@@ -19,11 +19,13 @@
 #pragma once
 
 #include <future>
+#include <exception>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-namespace lightGraphics::ui { class GuiContext; class Panel; class DropDown; class TextBox; class Label; }
+namespace lightGraphics::ui { class GuiContext; class Panel; class DropDown; class TextBox; class TextArea; class Label; }
 
 namespace lge {
 
@@ -34,7 +36,8 @@ struct FeedbackConfig {
 	std::string smtpUsername;
 	std::string smtpPassword;
 	std::string senderEmail;   // mailbox authorised by the SMTP server
-	std::vector<std::string> categories {"Bug report", "Feature request", "Feedback"};
+	std::vector<std::string> categories {"Bug report", "Feature request", "Feedback", "Crash report"};
+	bool crashReportingEnabled = true; // single switch for automatic crash reports
 
 	// Overlays values from the process environment onto `defaults` (typically the
 	// application's compile-time, non-secret values). For a prefix such as "MYAPP_FEEDBACK"
@@ -51,6 +54,23 @@ struct FeedbackConfig {
 	// offer feedback in the UI at all.
 	[[nodiscard]] bool isConfigured() const;
 };
+
+// Send a crash report synchronously using the feedback SMTP configuration. Returns
+// an empty string on success or when disabled, otherwise a delivery error when
+// available. Never throws, including if constructing the report fails.
+[[nodiscard]] std::string sendCrashReport(FeedbackConfig const& config, std::exception_ptr error) noexcept;
+
+// Wrap the concrete application's entry point so exceptions escaping startup, the
+// main loop, or shutdown are reported before they propagate to its usual handler.
+template <typename Function>
+decltype(auto) runWithCrashReporting(FeedbackConfig const& config, Function&& function) {
+	try {
+		return std::forward<Function>(function)();
+	} catch (...) {
+		(void)sendCrashReport(config, std::current_exception());
+		throw;
+	}
+}
 
 // Keep this object alive while its GuiContext exists. Call update() once per frame.
 // Sending runs off the UI thread; the message stays in the form if delivery fails.
@@ -73,7 +93,7 @@ private:
 	lightGraphics::ui::Panel* panel_ = nullptr;
 	lightGraphics::ui::DropDown* category_ = nullptr;
 	lightGraphics::ui::TextBox* replyTo_ = nullptr;
-	lightGraphics::ui::TextBox* message_ = nullptr;
+	lightGraphics::ui::TextArea* message_ = nullptr;
 	lightGraphics::ui::Label* status_ = nullptr;
 	std::future<std::string> sendResult_;
 };
