@@ -21,7 +21,6 @@ else()
 endif()
 option(LGE_BUILD_EXAMPLES "Build example applications" ${LGE_IS_TOP_LEVEL})
 option(LGE_BUILD_TESTS "Build automated tests" ${LGE_IS_TOP_LEVEL})
-option(LGE_BUILD_LICENSE_ISSUER "Build the internal offline licence issuing utility" OFF)
 option(LGE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors on engine targets" OFF)
 option(LGE_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer (GCC/Clang)" OFF)
 set(LGE_LIGHTVULKANGRAPHICS_SOURCE_DIR "" CACHE PATH
@@ -36,11 +35,6 @@ include(LightGameEngineTargets)
 include(LightGameEngineDependencies)
 
 add_subdirectory(src)
-if(LGE_BUILD_LICENSE_ISSUER)
-	add_executable(lge-license-tool tools/lge-license-tool.cpp)
-	target_link_libraries(lge-license-tool PRIVATE LightGame::Licensing)
-	lge_configure_target(lge-license-tool)
-endif()
 add_subdirectory(backends/Null)
 
 if(LGE_BUILD_DESKTOP_BRIDGE)
@@ -76,7 +70,7 @@ endif()
 # application assets and internal licence tools remain outside the engine package.
 set(_lge_export_targets
 	LightGameCore LightGamePhysics LightGameAI LightGameRendering
-	LightGameScene LightGameEngine LightGameLicensing LightGameRendererNull)
+	LightGameScene LightGameEngine LightGameRendererNull)
 if(TARGET LightGameRendererVulkan)
 	list(APPEND _lge_export_targets LightGameRendererVulkan)
 endif()

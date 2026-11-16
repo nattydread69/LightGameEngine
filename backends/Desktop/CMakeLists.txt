@@ -9,6 +9,6 @@ target_include_directories(LightGameDesktop PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(LightGameDesktop PUBLIC
-	LightGame::Licensing LightVulkanGraphics::LightVulkanGraphics LightVulkanGraphics::UI
+	LightVulkanGraphics::LightVulkanGraphics LightVulkanGraphics::UI
 	CURL::libcurl)
 lge_configure_target(LightGameDesktop)

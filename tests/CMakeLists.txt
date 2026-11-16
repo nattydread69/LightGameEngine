@@ -15,8 +15,6 @@ lge_add_test_suite(PhysicsTests PhysicsTests.cpp)
 lge_add_test_suite(SceneTests SceneTests.cpp)
 lge_add_test_suite(RenderingTests RenderingTests.cpp)
 lge_add_test_suite(EngineTests EngineTests.cpp)
-lge_add_test_suite(LicensingTests LicensingTests.cpp)
-target_link_libraries(LicensingTests PRIVATE LightGame::Licensing)
 
 if(TARGET LightGame::Desktop)
 	add_executable(DesktopBridgeTests DesktopBridgeTests.cpp)

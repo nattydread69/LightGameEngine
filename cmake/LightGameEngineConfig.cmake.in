@@ -2,7 +2,6 @@
 
 include(CMakeFindDependencyMacro)
 find_dependency(glm REQUIRED CONFIG)
-find_dependency(OpenSSL REQUIRED COMPONENTS Crypto)
 
 if(@LGE_CONFIG_HAS_GRAPHICS@)
 	find_dependency(LightVulkanGraphics 3.2 CONFIG REQUIRED)
