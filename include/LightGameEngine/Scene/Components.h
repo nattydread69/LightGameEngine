@@ -72,6 +72,26 @@ struct MeshRendererComponent
 	bool visible = true;
 };
 
+// A textured quad at the entity's position. The entity's rotation is used only for
+// SpriteOrientation::Oriented; billboards and ground sprites turn by rotationRadians instead,
+// and the entity's scale is ignored (use `size`). Presentation only.
+struct SpriteRendererComponent
+{
+	TextureHandle texture;
+	glm::vec2 size {1.0f};
+	glm::vec2 pivot {0.5f};
+	glm::vec4 uvRect {0.0f, 0.0f, 1.0f, 1.0f};
+	glm::vec4 tint {1.0f};
+	SpriteOrientation orientation = SpriteOrientation::Billboard;
+	float rotationRadians = 0.0f;
+	bool flipX = false;
+	bool flipY = false;
+	int sortOrder = 0;
+	// See RenderSprite::lit.
+	bool lit = false;
+	bool visible = true;
+};
+
 struct CameraComponent
 {
 	ProjectionType projection = ProjectionType::Perspective;

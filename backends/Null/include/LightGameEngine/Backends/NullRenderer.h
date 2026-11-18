@@ -38,6 +38,8 @@ public:
 	void destroyMesh(MeshHandle mesh) override;
 	MaterialHandle createMaterial(MaterialDescription const& description) override;
 	void destroyMaterial(MaterialHandle material) override;
+	TextureHandle createTexture(TextureDescription const& description) override;
+	void destroyTexture(TextureHandle texture) override;
 
 	void resize(std::uint32_t width, std::uint32_t height) override;
 	void render(RenderScene const& scene) override;
@@ -68,10 +70,15 @@ public:
 	{
 		return materials_.get(handle);
 	}
+	[[nodiscard]] TextureDescription const* texture(TextureHandle handle) const noexcept
+	{
+		return textures_.get(handle);
+	}
 
 private:
 	HandlePool<MeshTag, MeshDescription> meshes_;
 	HandlePool<MaterialTag, MaterialDescription> materials_;
+	HandlePool<TextureTag, TextureDescription> textures_;
 	RenderStatistics statistics_;
 	RenderScene lastScene_;
 	std::uint32_t width_ = 0;

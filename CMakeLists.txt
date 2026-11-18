@@ -38,7 +38,7 @@ add_subdirectory(src)
 add_subdirectory(backends/Null)
 
 if(LGE_BUILD_DESKTOP_BRIDGE)
-	find_package(LightVulkanGraphics 3.2 CONFIG REQUIRED COMPONENTS UI)
+	find_package(LightVulkanGraphics 3.4 CONFIG REQUIRED COMPONENTS UI)
 	add_subdirectory(backends/Desktop)
 endif()
 

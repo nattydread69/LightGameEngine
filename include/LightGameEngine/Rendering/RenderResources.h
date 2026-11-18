@@ -96,4 +96,35 @@ struct MaterialDescription
 	std::string name;
 };
 
+// How a texture is sampled when magnified or minified.
+enum class TextureFilter : std::uint8_t
+{
+	// Smooth: blends neighbouring texels. The default.
+	Linear,
+	// Hard texel edges, for pixel art.
+	Nearest
+};
+
+// A 2D image for sprites (and any future textured use). Give either a file path or raw pixels,
+// not both. Pixels are tightly packed 8-bit RGBA, first row at the top of the image.
+struct TextureDescription
+{
+	// Resolved filesystem path (see AssetManager::resolve); PNG, JPEG, BMP and TGA are decoded.
+	std::filesystem::path path;
+	std::uint32_t width = 0;
+	std::uint32_t height = 0;
+	std::vector<std::uint8_t> rgba8;
+	// Colour images are sRGB (the default); set false for masks and data.
+	bool srgb = true;
+	TextureFilter filter = TextureFilter::Linear;
+	// Build smaller versions for distant or shrunk drawing. Turn off for pixel art and sprite sheets that are
+	// never minified, where averaging neighbouring cells would blur their edges.
+	bool mipmaps = true;
+	std::string name;
+};
+
+// Throws std::invalid_argument unless exactly one of path and pixels is given and any pixels
+// match width * height * 4. Both backends validate with this function.
+void validateTextureDescription(TextureDescription const& description);
+
 }

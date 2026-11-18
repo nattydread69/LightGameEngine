@@ -71,6 +71,61 @@ struct RenderObject
 	glm::dvec3 scale {1.0};
 };
 
+// How a sprite's quad is oriented. The quad is drawn in its local XY plane facing +Z, with +Y up
+// the image and the origin at its pivot.
+enum class SpriteOrientation : std::uint8_t
+{
+	// Always faces the camera; rotationRadians spins it about the view axis.
+	Billboard,
+	// Lies flat on the ground (the XZ plane, facing +Y) with the top of the image towards -Z;
+	// rotationRadians turns it about +Y. The natural choice for top-down games.
+	Ground,
+	// Uses `rotation` as given (rotationRadians then spins it about its own +Z).
+	Oriented
+};
+
+// A textured quad. Drawn alpha-blended after the opaque scene, sorted by sortOrder and then
+// back to front, so soft edges and transparent texels composite correctly.
+struct RenderSprite
+{
+	RenderObjectId id = 0;
+	TextureHandle texture;
+	// World-space position of the pivot.
+	glm::dvec3 position {0.0};
+	// World size of the whole quad (width, height).
+	glm::vec2 size {1.0f};
+	// Which point of the quad sits at `position`: (0,0) bottom-left, (0.5,0.5) centre, (0.5,0) bottom-centre.
+	glm::vec2 pivot {0.5f};
+	// The part of the texture to show, as (u0, v0, u1, v1) with (0,0) the top-left corner of the
+	// image. A sprite sheet frame is a sub-rectangle; see atlasFrame().
+	glm::vec4 uvRect {0.0f, 0.0f, 1.0f, 1.0f};
+	// Multiplies the texture (RGBA), so alpha fades the sprite.
+	glm::vec4 tint {1.0f};
+	SpriteOrientation orientation = SpriteOrientation::Billboard;
+	float rotationRadians = 0.0f;
+	glm::dquat rotation {1.0, 0.0, 0.0, 0.0};
+	bool flipX = false;
+	bool flipY = false;
+	// Higher draws on top of lower, whatever the distance.
+	int sortOrder = 0;
+	// Lit sprites take the backend's scene shading; the default draws the artwork in its own colours.
+	bool lit = false;
+};
+
+// Where a sprite's centre goes and how its quad is turned, for a given camera.
+struct SpriteTransform
+{
+	glm::dvec3 center {0.0};
+	glm::dquat rotation {1.0, 0.0, 0.0, 0.0};
+	glm::vec2 size {1.0f};
+};
+
+[[nodiscard]] SpriteTransform computeSpriteTransform(RenderSprite const& sprite, RenderCamera const& camera);
+
+// UV rectangle of frame `index` in a sheet of `columns` x `rows` equal cells, counted left to
+// right then top to bottom. `index` wraps, so an ever-growing animation counter is fine.
+[[nodiscard]] glm::vec4 atlasFrame(std::uint32_t columns, std::uint32_t rows, std::uint32_t index);
+
 enum class LightType : std::uint8_t
 {
 	Directional,
@@ -133,6 +188,7 @@ struct RenderScene
 	RenderEnvironment environment;
 	std::vector<RenderObject> objects;
 	std::vector<RenderLight> lights;
+	std::vector<RenderSprite> sprites;
 	std::vector<ScreenText> texts;
 
 	// Empties the lists while keeping their capacity.
@@ -140,6 +196,7 @@ struct RenderScene
 	{
 		objects.clear();
 		lights.clear();
+		sprites.clear();
 		texts.clear();
 	}
 };

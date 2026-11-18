@@ -19,7 +19,9 @@
 #include "LightGameEngine/Rendering/RenderResources.h"
 #include "LightGameEngine/Rendering/RenderScene.h"
 
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <cmath>
 #include <stdexcept>
@@ -52,6 +54,70 @@ glm::dmat4 RenderCamera::projectionMatrix(double const aspectRatio) const
 		return glm::ortho(-halfWidth, halfWidth, -halfHeight, halfHeight, nearPlane, farPlane);
 	}
 	return glm::perspective(glm::radians(verticalFieldOfViewDegrees), aspectRatio, nearPlane, farPlane);
+}
+
+SpriteTransform computeSpriteTransform(RenderSprite const& sprite, RenderCamera const& camera)
+{
+	glm::dquat base {1.0, 0.0, 0.0, 0.0};
+	glm::dquat spin = glm::angleAxis(static_cast<double>(sprite.rotationRadians), glm::dvec3 {0.0, 0.0, 1.0});
+	switch (sprite.orientation)
+	{
+	case SpriteOrientation::Billboard:
+		base = camera.orientation;
+		break;
+	case SpriteOrientation::Ground:
+		// Tip the quad flat (+Z becomes +Y, +Y becomes -Z), then turn it about the vertical.
+		base = glm::angleAxis(static_cast<double>(sprite.rotationRadians), glm::dvec3 {0.0, 1.0, 0.0})
+			* glm::angleAxis(-glm::half_pi<double>(), glm::dvec3 {1.0, 0.0, 0.0});
+		spin = glm::dquat {1.0, 0.0, 0.0, 0.0};
+		break;
+	case SpriteOrientation::Oriented:
+		base = sprite.rotation;
+		break;
+	}
+	SpriteTransform result;
+	result.rotation = glm::normalize(base * spin);
+	result.size = sprite.size;
+	// The quad is built centred, so move it by the offset from the pivot to the middle.
+	glm::dvec3 const offset {(0.5 - sprite.pivot.x) * sprite.size.x, (0.5 - sprite.pivot.y) * sprite.size.y, 0.0};
+	result.center = sprite.position + result.rotation * offset;
+	return result;
+}
+
+glm::vec4 atlasFrame(std::uint32_t const columns, std::uint32_t const rows, std::uint32_t const index)
+{
+	if (columns == 0 || rows == 0)
+	{
+		throw std::invalid_argument("atlasFrame: columns and rows must be positive");
+	}
+	std::uint32_t const frame = index % (columns * rows);
+	float const width = 1.0f / static_cast<float>(columns);
+	float const height = 1.0f / static_cast<float>(rows);
+	float const u = static_cast<float>(frame % columns) * width;
+	float const v = static_cast<float>(frame / columns) * height;
+	return {u, v, u + width, v + height};
+}
+
+void validateTextureDescription(TextureDescription const& description)
+{
+	bool const hasPath = !description.path.empty();
+	bool const hasPixels = !description.rgba8.empty();
+	if (hasPath == hasPixels)
+	{
+		throw std::invalid_argument("TextureDescription: give exactly one of path and rgba8");
+	}
+	if (hasPixels)
+	{
+		if (description.width == 0 || description.height == 0 || description.width > 16384 || description.height > 16384)
+		{
+			throw std::invalid_argument("TextureDescription: width and height must be between 1 and 16384");
+		}
+		std::size_t const expected = static_cast<std::size_t>(description.width) * description.height * 4;
+		if (description.rgba8.size() != expected)
+		{
+			throw std::invalid_argument("TextureDescription: rgba8 holds " + std::to_string(description.rgba8.size()) + " bytes, expected " + std::to_string(expected));
+		}
+	}
 }
 
 void validateMeshData(MeshData const& data)

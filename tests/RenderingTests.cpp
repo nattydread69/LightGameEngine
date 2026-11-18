@@ -22,6 +22,9 @@
 #include "LightGameEngine/Rendering/RenderResourceCache.h"
 #include "LightGameEngine/Scene/GameWorld.h"
 
+#include <glm/gtc/constants.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 using namespace lge;
 using namespace lge::test;
 
@@ -156,6 +159,140 @@ TestCase const perspectiveProjection {"RenderCamera: perspective matrix", []
 		checkNear(projection[1][1], 1.0, 1e-12, "cot(45 deg) = 1");
 		glm::dvec4 const clip = projection * camera.viewMatrix() * glm::dvec4 {0.0, 0.0, -10.0, 1.0};
 		check(clip.w > 0.0, "point in front of the camera");
+	}};
+
+TextureDescription checkerboard(std::uint32_t const size)
+{
+	TextureDescription description;
+	description.width = size;
+	description.height = size;
+	description.name = "checker";
+	for (std::uint32_t y = 0; y < size; ++y)
+	{
+		for (std::uint32_t x = 0; x < size; ++x)
+		{
+			std::uint8_t const value = ((x + y) % 2 == 0) ? 255 : 40;
+			description.rgba8.insert(description.rgba8.end(), {value, value, value, 255});
+		}
+	}
+	return description;
+}
+
+TestCase const textureLifecycle {"NullRenderer: textures are validated and generation-checked", []
+	{
+		NullRenderer renderer;
+		TextureHandle const texture = renderer.createTexture(checkerboard(4));
+		check(texture.isValid(), "valid texture handle");
+		checkEqual(renderer.statistics().textures, std::size_t {1}, "one texture");
+		renderer.destroyTexture(texture);
+		check(renderer.texture(texture) == nullptr, "destroyed texture is gone");
+		checkThrows<std::invalid_argument>([&]
+			{
+				renderer.destroyTexture(texture);
+			}, "double destroy throws");
+
+		TextureDescription wrongSize = checkerboard(4);
+		wrongSize.rgba8.pop_back();
+		checkThrows<std::invalid_argument>([&]
+			{
+				(void)renderer.createTexture(wrongSize);
+			}, "pixel data of the wrong length is rejected");
+		checkThrows<std::invalid_argument>([&]
+			{
+				(void)renderer.createTexture(TextureDescription {});
+			}, "an empty description is rejected");
+		TextureDescription both = checkerboard(2);
+		both.path = "x.png";
+		checkThrows<std::invalid_argument>([&]
+			{
+				(void)renderer.createTexture(both);
+			}, "path and pixels together are rejected");
+	}};
+
+TestCase const spritesAreCountedAndStaleOnesRejected {"NullRenderer: sprites need a live texture", []
+	{
+		NullRenderer renderer;
+		TextureHandle const live = renderer.createTexture(checkerboard(4));
+		TextureHandle const doomed = renderer.createTexture(checkerboard(2));
+		renderer.destroyTexture(doomed);
+		RenderScene scene;
+		RenderSprite good;
+		good.id = 1;
+		good.texture = live;
+		RenderSprite stale;
+		stale.id = 2;
+		stale.texture = doomed;
+		scene.sprites = {good, stale};
+		renderer.render(scene);
+		RenderStatistics const stats = renderer.statistics();
+		checkEqual(stats.submittedSprites, std::size_t {2}, "both submitted");
+		checkEqual(stats.drawnSprites, std::size_t {1}, "one drawn");
+		checkEqual(stats.rejectedSprites, std::size_t {1}, "the stale one is skipped, not an error");
+		scene.clear();
+		check(scene.sprites.empty(), "clear empties the sprite list");
+	}};
+
+TestCase const atlasFrames {"atlasFrame: sheet cells in reading order, wrapping", []
+	{
+		glm::vec4 const first = atlasFrame(4, 2, 0);
+		checkNear(first.x, 0.0, 1e-6, "frame 0 starts at the left");
+		checkNear(first.z, 0.25, 1e-6, "a quarter wide");
+		checkNear(first.w, 0.5, 1e-6, "half tall");
+		glm::vec4 const second_row = atlasFrame(4, 2, 5);
+		checkNear(second_row.x, 0.25, 1e-6, "frame 5 is column 1");
+		checkNear(second_row.y, 0.5, 1e-6, "on the second row");
+		check(atlasFrame(4, 2, 8) == atlasFrame(4, 2, 0), "the index wraps");
+		checkThrows<std::invalid_argument>([]
+			{
+				(void)atlasFrame(0, 2, 0);
+			}, "zero columns is rejected");
+	}};
+
+TestCase const spriteOrientation {"computeSpriteTransform: billboard, ground and pivot", []
+	{
+		RenderCamera camera;
+		camera.orientation = glm::angleAxis(0.7, glm::dvec3 {0.0, 1.0, 0.0});
+		RenderSprite sprite;
+		sprite.position = {2.0, 1.0, 3.0};
+		sprite.size = {2.0f, 4.0f};
+
+		sprite.orientation = SpriteOrientation::Billboard;
+		SpriteTransform const board = computeSpriteTransform(sprite, camera);
+		glm::dvec3 const facing = board.rotation * glm::dvec3 {0.0, 0.0, 1.0};
+		glm::dvec3 const towardsCamera = camera.orientation * glm::dvec3 {0.0, 0.0, 1.0};
+		checkNear(glm::dot(facing, towardsCamera), 1.0, 1e-9, "a billboard faces the camera");
+		checkNear(board.center.x, 2.0, 1e-9, "a centred pivot leaves the centre on the position");
+
+		sprite.orientation = SpriteOrientation::Ground;
+		SpriteTransform const flat = computeSpriteTransform(sprite, camera);
+		glm::dvec3 const up = flat.rotation * glm::dvec3 {0.0, 0.0, 1.0};
+		glm::dvec3 const top = flat.rotation * glm::dvec3 {0.0, 1.0, 0.0};
+		checkNear(up.y, 1.0, 1e-9, "a ground sprite faces up");
+		checkNear(top.z, -1.0, 1e-9, "its top points towards -Z");
+
+		sprite.rotationRadians = glm::half_pi<float>();
+		glm::dvec3 const turned = computeSpriteTransform(sprite, camera).rotation * glm::dvec3 {0.0, 1.0, 0.0};
+		checkNear(std::abs(turned.x), 1.0, 1e-6, "rotation turns it about the vertical");
+
+		// A bottom-centre pivot puts the base of the sprite on the position, so the centre rises.
+		sprite.rotationRadians = 0.0f;
+		sprite.orientation = SpriteOrientation::Oriented;
+		sprite.pivot = {0.5f, 0.0f};
+		SpriteTransform const standing = computeSpriteTransform(sprite, camera);
+		checkNear(standing.center.y, 1.0 + 2.0, 1e-9, "half the height above the pivot");
+	}};
+
+TestCase const textureDefaults {"TextureDescription: linear with mipmaps by default, sprites unlit", []
+	{
+		TextureDescription const description;
+		check(description.filter == TextureFilter::Linear, "linear by default");
+		check(description.mipmaps, "mipmaps by default");
+		check(!RenderSprite {}.lit, "sprites draw their own colours unless asked to be lit");
+		NullRenderer renderer;
+		TextureDescription pixelArt = checkerboard(8);
+		pixelArt.filter = TextureFilter::Nearest;
+		pixelArt.mipmaps = false;
+		check(renderer.createTexture(pixelArt).isValid(), "a nearest-filtered, unmipped texture is accepted");
 	}};
 
 }

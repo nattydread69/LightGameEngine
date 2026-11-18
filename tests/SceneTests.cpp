@@ -18,6 +18,7 @@
 
 #include "TestHarness.h"
 
+#include "LightGameEngine/Backends/NullRenderer.h"
 #include "LightGameEngine/Scene/GameWorld.h"
 #include "LightGameEngine/Scene/PhysicsSystem2D.h"
 
@@ -276,6 +277,44 @@ TestCase const attachmentsDestroyedWithParent {"GameWorld: destroying a parent d
 		check(!world.isAlive(child), "child destroyed");
 		check(!world.isAlive(grandchild), "grandchild destroyed");
 		check(world.isAlive(bystander), "unrelated entity untouched");
+	}};
+
+TestCase const spriteComponentsReachTheScene {"GameWorld: sprite renderers are extracted with their transform", []
+	{
+		NullRenderer renderer;
+		TextureDescription pixels;
+		pixels.width = 1;
+		pixels.height = 1;
+		pixels.rgba8 = {255, 255, 255, 255};
+		TextureHandle const texture = renderer.createTexture(pixels);
+
+		GameWorld world;
+		Transform transform;
+		transform.position = {1.0, 2.0, 3.0};
+		Entity const shown = world.createEntity("shown", transform);
+		SpriteRendererComponent sprite;
+		sprite.texture = texture;
+		sprite.size = {2.0f, 3.0f};
+		sprite.orientation = SpriteOrientation::Ground;
+		sprite.sortOrder = 4;
+		sprite.lit = true;
+		world.add<SpriteRendererComponent>(shown, sprite);
+		Entity const hidden = world.createEntity("hidden", transform);
+		sprite.visible = false;
+		world.add<SpriteRendererComponent>(hidden, sprite);
+
+		RenderScene scene;
+		world.extractRenderScene(scene, 1.0);
+		checkEqual(scene.sprites.size(), std::size_t {1}, "only the visible sprite is submitted");
+		RenderSprite const& out = scene.sprites.front();
+		check(out.id == shown.id(), "the id is the entity's, so the backend can keep state across frames");
+		check(out.texture == texture, "texture handle carried over");
+		checkNear(out.position.y, 2.0, 1e-9, "position comes from the transform");
+		checkNear(out.size.y, 3.0, 1e-6, "size carried over");
+		check(out.orientation == SpriteOrientation::Ground && out.sortOrder == 4 && out.lit, "orientation, sort order and lighting carried over");
+
+		renderer.render(scene);
+		checkEqual(renderer.statistics().drawnSprites, std::size_t {1}, "and it draws");
 	}};
 
 }

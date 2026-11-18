@@ -37,9 +37,14 @@ struct RenderStatistics
 	std::size_t rejectedObjects = 0;
 	std::size_t lights = 0;
 	std::size_t texts = 0;
+	// Sprites submitted, drawn, and skipped for a stale texture handle in the latest frame.
+	std::size_t submittedSprites = 0;
+	std::size_t drawnSprites = 0;
+	std::size_t rejectedSprites = 0;
 	// Live resources.
 	std::size_t meshes = 0;
 	std::size_t materials = 0;
+	std::size_t textures = 0;
 };
 
 // Backend-independent renderer. The game engine talks only to this interface.
@@ -61,6 +66,11 @@ public:
 	virtual void destroyMesh(MeshHandle mesh) = 0;
 	virtual MaterialHandle createMaterial(MaterialDescription const& description) = 0;
 	virtual void destroyMaterial(MaterialHandle material) = 0;
+	// Throws std::invalid_argument for a bad description and std::runtime_error if an image file
+	// cannot be read or decoded.
+	virtual TextureHandle createTexture(TextureDescription const& description) = 0;
+	// Sprites still using it are skipped (and counted as rejected), like stale meshes.
+	virtual void destroyTexture(TextureHandle texture) = 0;
 
 	// Informs the renderer of the drawable size in pixels.
 	virtual void resize(std::uint32_t width, std::uint32_t height) = 0;

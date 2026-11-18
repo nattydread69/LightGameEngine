@@ -139,6 +139,8 @@ target_link_libraries(MyGame PRIVATE LightGame::Engine LightGame::RendererVulkan
 - `examples/RobotArena` shows a complete game: walls with static colliders, robots
   with attached parts, projectiles as triggers, A* patrols, line-of-sight chasing,
   deferred spawning and destruction, HUD text, and a restartable round.
+- `examples/SpriteDemo` shows sprites: a generated sprite sheet animated with `atlasFrame`, ground
+  and billboard orientations, pivots, flipping and alpha sorting.
 - `examples/BasicScene` shows custom procedural meshes, lights and switching between
   perspective and orthographic cameras.
 - [architecture.md](architecture.md) explains the loop, ownership and ECS rules;

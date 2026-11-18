@@ -40,6 +40,9 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <array>
+#include <fstream>
+#include <functional>
 #include <cmath>
 #include <iostream>
 #include <map>
@@ -145,12 +148,15 @@ struct CustomDraw
 	glm::vec3 position;
 	glm::quat rotation;
 	glm::vec3 scale;
+	// Layer and sort key: sprites go in the transparent layer, ordered back to front.
+	lg::DrawOptions options {};
 
 	bool operator==(CustomDraw const& other) const
 	{
 		return mesh.index == other.mesh.index && mesh.generation == other.mesh.generation &&
 			material.index == other.material.index && material.generation == other.material.generation &&
-			position == other.position && rotation == other.rotation && scale == other.scale;
+			position == other.position && rotation == other.rotation && scale == other.scale &&
+			options.layer == other.options.layer && options.sortKey == other.options.sortKey;
 	}
 };
 
@@ -164,6 +170,56 @@ struct PendingMeshRelease
 	lg::MeshHandle mesh;
 	std::uint64_t releaseFrame;
 };
+
+// Work that must wait until the GPU can no longer be using a resource (destroying a sprite
+// texture and the material built on it, in that order of dependency).
+struct PendingAction
+{
+	std::function<void()> action;
+	std::uint64_t releaseFrame = 0;
+};
+
+// A sprite texture on the GPU, with the alpha-blended material that draws it (made on first use).
+struct TextureRecord
+{
+	TextureDescription description;
+	lg::Texture2DHandle gpu;
+	// Indexed by "lit": the unlit material draws the artwork as is, the lit one takes LightVulkanGraphics' shading.
+	std::array<lg::MaterialHandle, 2> material {};
+	std::array<bool, 2> hasMaterial {};
+};
+
+// Sprite quads differ only by UV rectangle and tint, so one baked mesh serves every sprite that
+// shares them. Meshes unused for a while are released.
+struct SpriteMeshKey
+{
+	std::array<float, 4> uv {};
+	std::uint32_t tint = 0;
+
+	friend bool operator<(SpriteMeshKey const& a, SpriteMeshKey const& b)
+	{
+		return std::tie(a.uv, a.tint) < std::tie(b.uv, b.tint);
+	}
+};
+
+struct SpriteMeshEntry
+{
+	lg::MeshHandle mesh;
+	std::uint64_t lastUsedFrame = 0;
+};
+
+constexpr std::uint64_t spriteMeshIdleFrames = 240;
+
+std::uint32_t packTint(glm::vec4 const& tint)
+{
+	std::uint32_t packed = 0;
+	for (int i = 0; i < 4; ++i)
+	{
+		float const clamped = std::clamp(tint[i], 0.0f, 1.0f);
+		packed |= static_cast<std::uint32_t>(std::lround(clamped * 255.0f)) << (8 * i);
+	}
+	return packed;
+}
 
 // GLFW reports the wheel only through a callback with no user data (the window user
 // pointer belongs to LightVulkanGraphics), so the one live backend is reached through
@@ -197,6 +253,9 @@ struct LightVulkanBackend::Impl
 
 	HandlePool<MeshTag, MeshDescription> meshes;
 	HandlePool<MaterialTag, MaterialRecord> materials;
+	HandlePool<TextureTag, TextureRecord> textures;
+	std::map<SpriteMeshKey, SpriteMeshEntry> spriteMeshes;
+	std::vector<PendingAction> pendingActions;
 
 	std::vector<ObjectSlot> objectSlots;
 	std::vector<std::uint32_t> freeObjectSlots;
@@ -469,6 +528,125 @@ struct LightVulkanBackend::Impl
 		pendingReleases.erase(std::remove_if(pendingReleases.begin(), pendingReleases.end(), ready), pendingReleases.end());
 	}
 
+	void releaseRetiredActions()
+	{
+		auto const ready = [this](PendingAction const& pending)
+		{
+			return pending.releaseFrame <= frameNumber;
+		};
+		for (PendingAction const& pending : pendingActions)
+		{
+			if (ready(pending))
+			{
+				pending.action();
+			}
+		}
+		pendingActions.erase(std::remove_if(pendingActions.begin(), pendingActions.end(), ready), pendingActions.end());
+	}
+
+	lg::MeshHandle spriteMesh(RenderSprite const& sprite)
+	{
+		// Flipping is just swapping the UV corners.
+		float u0 = sprite.uvRect.x;
+		float v0 = sprite.uvRect.y;
+		float u1 = sprite.uvRect.z;
+		float v1 = sprite.uvRect.w;
+		if (sprite.flipX)
+		{
+			std::swap(u0, u1);
+		}
+		if (sprite.flipY)
+		{
+			std::swap(v0, v1);
+		}
+		SpriteMeshKey const key {{u0, v0, u1, v1}, packTint(sprite.tint)};
+		auto const found = spriteMeshes.find(key);
+		if (found != spriteMeshes.end())
+		{
+			found->second.lastUsedFrame = frameNumber;
+			return found->second.mesh;
+		}
+		// The tint is baked into the vertex colours, which the textured shader multiplies in.
+		glm::vec4 const colour {sprite.tint};
+		lg::MeshData quad;
+		auto const corner = [&](float const x, float const y, float const u, float const v)
+		{
+			lg::MeshVertex vertex;
+			vertex.position = {x, y, 0.0f};
+			vertex.normal = {0.0f, 0.0f, 1.0f};
+			vertex.color = colour;
+			vertex.uv = {u, v};
+			quad.vertices.push_back(vertex);
+		};
+		corner(-0.5f, -0.5f, u0, v1);
+		corner(0.5f, -0.5f, u1, v1);
+		corner(0.5f, 0.5f, u1, v0);
+		corner(-0.5f, 0.5f, u0, v0);
+		quad.indices = {0, 1, 2, 0, 2, 3};
+		lg::MeshHandle const handle = graphics->createStaticMesh(quad);
+		spriteMeshes.emplace(key, SpriteMeshEntry {handle, frameNumber});
+		return handle;
+	}
+
+	lg::MaterialHandle spriteMaterial(TextureRecord& record, bool const lit)
+	{
+		std::size_t const which = lit ? 1 : 0;
+		if (!record.hasMaterial[which])
+		{
+			lg::MaterialDescription description;
+			// Unlit needs LightVulkanGraphics 3.5; older libraries fall back to their fixed key-light shading.
+#ifdef LVG_HAS_TEXTURED_UNLIT
+			description.shaderProgram.selection = lit ? lg::ShaderSelection::Textured : lg::ShaderSelection::TexturedUnlit;
+#else
+			description.shaderProgram.selection = lg::ShaderSelection::Textured;
+#endif
+			description.textures[0] = record.gpu;
+			// Soft edges need blending; sprites test depth against the scene but do not write it, so
+			// overlapping translucent sprites do not cut holes in each other. Both faces are visible.
+			description.alphaBlendingEnabled = true;
+			description.depthWriteEnabled = false;
+			description.cullMode = lg::CullMode::None;
+			record.material[which] = graphics->createMaterial(description);
+			record.hasMaterial[which] = true;
+		}
+		return record.material[which];
+	}
+
+	// Queues this frame's sprites as transparent mesh draws, ordered by sortOrder and then far to near.
+	void collectSprites(RenderScene const& scene, std::size_t& drawn)
+	{
+		for (RenderSprite const& sprite : scene.sprites)
+		{
+			TextureRecord* const record = textures.get(sprite.texture);
+			if (record == nullptr)
+			{
+				continue;
+			}
+			SpriteTransform const placed = computeSpriteTransform(sprite, scene.camera);
+			float const distance = static_cast<float>(glm::length(placed.center - scene.camera.position));
+			CustomDraw draw {spriteMesh(sprite), spriteMaterial(*record, sprite.lit), relative(placed.center), glm::quat {placed.rotation},
+				glm::vec3 {placed.size.x, placed.size.y, 1.0f}};
+			draw.options.layer = lg::RenderLayer::Transparent;
+			draw.options.sortKey = static_cast<float>(sprite.sortOrder) * 1.0e5f - distance;
+			customDraws.push_back(draw);
+			++drawn;
+		}
+		// Release quads nobody has asked for in a while.
+		for (auto it = spriteMeshes.begin(); it != spriteMeshes.end();)
+		{
+			if (frameNumber - it->second.lastUsedFrame > spriteMeshIdleFrames)
+			{
+				pendingReleases.push_back(PendingMeshRelease {it->second.mesh, frameNumber + framesInFlight + 1});
+				it = spriteMeshes.erase(it);
+				customDrawsDirty = true;
+			}
+			else
+			{
+				++it;
+			}
+		}
+	}
+
 	void submitCustomDraws()
 	{
 		// Re-registering draws re-sorts the library's draw list, so only do it when the
@@ -484,7 +662,7 @@ struct LightVulkanBackend::Impl
 			transform.position = draw.position;
 			transform.rotation = draw.rotation;
 			transform.scale = draw.scale;
-			graphics->drawMesh(draw.mesh, transform, draw.material);
+			graphics->drawMesh(draw.mesh, transform, draw.material, draw.options);
 		}
 		submittedCustomDraws = customDraws;
 		customDrawsDirty = false;
@@ -818,6 +996,75 @@ void LightVulkanBackend::destroyMaterial(MaterialHandle const material)
 		});
 }
 
+TextureHandle LightVulkanBackend::createTexture(TextureDescription const& description)
+{
+	validateTextureDescription(description);
+	Impl& impl = *impl_;
+	lg::Texture2DDescription gpuDescription;
+	gpuDescription.format = description.srgb ? lg::Texture2DFormat::RGBA8_SRGB : lg::Texture2DFormat::RGBA8_UNORM;
+	gpuDescription.repeat = false;
+#ifdef LVG_HAS_TEXTURE_FILTER
+	gpuDescription.filter = description.filter == TextureFilter::Nearest ? lg::Texture2DFilter::Nearest : lg::Texture2DFilter::Linear;
+#endif
+	gpuDescription.generateMipmaps = description.mipmaps;
+	TextureRecord record;
+	record.description = description;
+	if (!description.path.empty())
+	{
+		std::ifstream file(description.path, std::ios::binary);
+		if (!file)
+		{
+			throw std::runtime_error("LightVulkanBackend::createTexture: cannot open " + description.path.string());
+		}
+		std::vector<char> const bytes((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		// Clamped, not repeated: a sprite sheet must not bleed in from the opposite edge.
+#ifdef LVG_HAS_TEXTURE_FILTER
+		record.gpu = impl.graphics->createTexture2DFromImage(bytes.data(), bytes.size(), gpuDescription);
+#else
+		// 3.4 cannot choose a filter or skip mipmaps for decoded images.
+		record.gpu = impl.graphics->createTexture2DFromImage(bytes.data(), bytes.size(), gpuDescription.format, false);
+#endif
+		if (!record.gpu.isValid())
+		{
+			throw std::runtime_error("LightVulkanBackend::createTexture: cannot decode " + description.path.string());
+		}
+	}
+	else
+	{
+		gpuDescription.width = description.width;
+		gpuDescription.height = description.height;
+		record.gpu = impl.graphics->createTexture2D(gpuDescription, description.rgba8.data(), description.rgba8.size());
+	}
+	return impl.textures.insert(std::move(record));
+}
+
+void LightVulkanBackend::destroyTexture(TextureHandle const texture)
+{
+	Impl& impl = *impl_;
+	TextureRecord const* const found = impl.textures.get(texture);
+	if (found == nullptr)
+	{
+		throw std::invalid_argument("LightVulkanBackend::destroyTexture: handle is invalid or already destroyed");
+	}
+	// The material must go before the texture it samples, and neither while a frame in flight may
+	// still draw with them.
+	TextureRecord const record = *found;
+	impl.textures.erase(texture);
+	impl.customDrawsDirty = true;
+	lg::lightVulkanGraphics* const graphics = impl.graphics.get();
+	impl.pendingActions.push_back(PendingAction {[graphics, record]
+		{
+			for (std::size_t which = 0; which < record.material.size(); ++which)
+			{
+				if (record.hasMaterial[which])
+				{
+					graphics->destroyMaterial(record.material[which]);
+				}
+			}
+			graphics->destroyTexture2D(record.gpu);
+		}, impl.frameNumber + framesInFlight + 1});
+}
+
 void LightVulkanBackend::resize(std::uint32_t, std::uint32_t)
 {
 	// LightVulkanGraphics observes framebuffer resizes itself and rebuilds its
@@ -829,6 +1076,7 @@ void LightVulkanBackend::render(RenderScene const& scene)
 	Impl& impl = *impl_;
 	++impl.frameNumber;
 	impl.releaseRetiredMeshes();
+	impl.releaseRetiredActions();
 
 	impl.updateRenderOrigin(scene.camera.position);
 	impl.applyEnvironment(scene.environment);
@@ -860,6 +1108,8 @@ void LightVulkanBackend::render(RenderScene const& scene)
 		}
 		++drawn;
 	}
+	std::size_t drawnSprites = 0;
+	impl.collectSprites(scene, drawnSprites);
 	impl.hideUnseenObjects();
 	impl.submitCustomDraws();
 	impl.applyLights(scene.lights);
@@ -871,6 +1121,9 @@ void LightVulkanBackend::render(RenderScene const& scene)
 	impl.statistics.rejectedObjects = scene.objects.size() - drawn;
 	impl.statistics.lights = std::min(scene.lights.size(), lg::MaxForwardLights);
 	impl.statistics.texts = scene.texts.size();
+	impl.statistics.submittedSprites = scene.sprites.size();
+	impl.statistics.drawnSprites = drawnSprites;
+	impl.statistics.rejectedSprites = scene.sprites.size() - drawnSprites;
 }
 
 RenderStatistics LightVulkanBackend::statistics() const
@@ -878,6 +1131,7 @@ RenderStatistics LightVulkanBackend::statistics() const
 	RenderStatistics result = impl_->statistics;
 	result.meshes = impl_->meshes.size();
 	result.materials = impl_->materials.size();
+	result.textures = impl_->textures.size();
 	return result;
 }
 

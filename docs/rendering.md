@@ -66,6 +66,27 @@ built-in keyboard and mouse camera controls are disabled; the engine owns the ca
 | `RenderEnvironment` | `setClearColor`, `setAmbientLight` | Only sent on change. |
 | `ScreenText` | `createScreenText`, `updateScreenText`, `setScreenTextVisible` | Pooled per text id; capacity grows by recreating. Positions are in swapchain pixels from the top-left. |
 | Material texture | `setObjectTexturePath` (library caches textures by path) | Primitives only. Paths come from `AssetManager::resolve`. |
+| Sprite | textured quad: `createTexture2D*`, a `Textured` alpha-blended material, `drawMesh` in the transparent layer | See Sprites below. |
+
+### Sprites
+
+A sprite is a textured quad: a `RenderSprite` in `RenderScene::sprites`, or an entity with a `SpriteRendererComponent` (position from its transform, interpolated like meshes).
+
+- **Textures** are renderer resources: `IRenderer::createTexture(TextureDescription)` from a file path (PNG, JPEG, BMP, TGA) or raw RGBA8 pixels, and `destroyTexture` to release. A sprite whose texture was destroyed is skipped and counted in `RenderStatistics::rejectedSprites`, like a stale mesh.
+- **Placement.** `size` is in world units. `pivot` picks which point of the quad sits on `position` ((0.5, 0) is bottom-centre, so a character stands on its position). `SpriteOrientation::Billboard` faces the camera, `Ground` lies flat on the XZ plane with the top of the image towards -Z (the natural choice for top-down games), and `Oriented` uses an explicit rotation. The maths is the shared `computeSpriteTransform`, so every backend and the tests agree.
+- **Sprite sheets.** `uvRect` is `(u0, v0, u1, v1)` with `(0, 0)` the top-left of the image. `atlasFrame(columns, rows, index)` returns the rectangle of a frame in reading order; the index wraps, so a plain counter animates. `flipX` and `flipY` mirror the frame, and `tint` multiplies the texture (its alpha fades the sprite).
+- **Drawing order.** Sprites are alpha-blended after the opaque scene. They test depth but do not write it, so translucent sprites do not cut holes in each other. They sort by `sortOrder` (higher on top) and then back to front by distance; for flat sprites at the same distance, `sortOrder` is how you layer them.
+
+| Engine | LightVulkanGraphics |
+|---|---|
+| Texture | `createTexture2D` or `createTexture2DFromImage` (sRGB or linear, mip chain, clamp to edge so sheet cells do not wrap) |
+| Sprite material | one per texture and lit/unlit: `ShaderSelection::TexturedUnlit` (or `Textured` when lit), alpha blending on, depth write off, culling off |
+| Quad | one baked static mesh per (UV rectangle, tint), shared by every sprite that uses them, released after 240 idle frames |
+| Draw | `drawMesh` in `RenderLayer::Transparent` with `sortKey = sortOrder * 1e5 - distance` |
+
+Shading and filtering. Sprites are unlit by default, drawn in their own colours (`RenderSprite::lit` opts in to the library's shading). `TextureDescription::filter` selects linear or nearest sampling (hard texels for pixel art), and `mipmaps = false` stops sheet cells being averaged together. The tint is baked into the quad because LightVulkanGraphics has no per-draw tint.
+
+Versions: sprites need LightVulkanGraphics 3.4. The unlit shader and the nearest filter need 3.5; against 3.4 the backend still draws sprites, but with the library's fixed key-light shading and linear filtering (the engine checks `LVG_HAS_TEXTURED_UNLIT` and `LVG_HAS_TEXTURE_FILTER`).
 
 ### Precision: render origin
 

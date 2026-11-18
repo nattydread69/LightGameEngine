@@ -78,6 +78,7 @@ Headless-only build (no Vulkan needed): `cmake --preset headless && cmake --buil
 ```bash
 ./build/examples/BasicWindow/BasicWindow      # window, clear colour, resize, Esc to quit
 ./build/examples/BasicScene/BasicScene        # primitives, custom-mesh terrain, lights, P toggles projection
+./build/examples/SpriteDemo/SpriteDemo        # textured sprites: sprite-sheet animation, billboards, ground sprites, alpha sorting
 ./build/examples/RobotArena/RobotArena        # the playable demo
 ./build/examples/RobotArena/RobotArena --autopilot   # watch it play itself
 ./build/examples/GettingStarted/GettingStarted       # headless minimal game from the docs
@@ -113,7 +114,7 @@ ctest --test-dir build                # everything
 |---|---|
 | `unit;headless` | CoreTests, EcsTests, InputTests, PhysicsTests (incl. AI), SceneTests, RenderingTests, EngineTests (incl. assets), architecture check |
 | `headless` (integration) | RobotArenaHeadlessTests — the full game for a simulated minute, determinism across frame rates |
-| `vulkan;integration` | BasicWindow, BasicScene and RobotArena run for a fixed number of frames with screenshots |
+| `vulkan;integration` | BasicWindow, BasicScene, SpriteDemo and RobotArena run for a fixed number of frames with screenshots |
 
 ## Using the engine from your own game repository
 

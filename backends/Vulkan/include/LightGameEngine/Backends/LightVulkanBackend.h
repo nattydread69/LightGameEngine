@@ -68,6 +68,8 @@ public:
 	void destroyMesh(MeshHandle mesh) override;
 	MaterialHandle createMaterial(MaterialDescription const& description) override;
 	void destroyMaterial(MaterialHandle material) override;
+	TextureHandle createTexture(TextureDescription const& description) override;
+	void destroyTexture(TextureHandle texture) override;
 	void resize(std::uint32_t width, std::uint32_t height) override;
 	void render(RenderScene const& scene) override;
 	[[nodiscard]] RenderStatistics statistics() const override;

@@ -53,6 +53,20 @@ void NullRenderer::destroyMaterial(MaterialHandle const material)
 	}
 }
 
+TextureHandle NullRenderer::createTexture(TextureDescription const& description)
+{
+	validateTextureDescription(description);
+	return textures_.insert(description);
+}
+
+void NullRenderer::destroyTexture(TextureHandle const texture)
+{
+	if (!textures_.erase(texture))
+	{
+		throw std::invalid_argument("NullRenderer::destroyTexture: handle is invalid or already destroyed");
+	}
+}
+
 void NullRenderer::resize(std::uint32_t const width, std::uint32_t const height)
 {
 	width_ = width;
@@ -70,12 +84,23 @@ void NullRenderer::render(RenderScene const& scene)
 			++drawn;
 		}
 	}
+	std::size_t drawnSprites = 0;
+	for (RenderSprite const& sprite : scene.sprites)
+	{
+		if (textures_.contains(sprite.texture))
+		{
+			++drawnSprites;
+		}
+	}
 	++statistics_.framesRendered;
 	statistics_.submittedObjects = scene.objects.size();
 	statistics_.drawnObjects = drawn;
 	statistics_.rejectedObjects = scene.objects.size() - drawn;
 	statistics_.lights = scene.lights.size();
 	statistics_.texts = scene.texts.size();
+	statistics_.submittedSprites = scene.sprites.size();
+	statistics_.drawnSprites = drawnSprites;
+	statistics_.rejectedSprites = scene.sprites.size() - drawnSprites;
 	lastScene_ = scene;
 }
 
@@ -84,6 +109,7 @@ RenderStatistics NullRenderer::statistics() const
 	RenderStatistics result = statistics_;
 	result.meshes = meshes_.size();
 	result.materials = materials_.size();
+	result.textures = textures_.size();
 	return result;
 }
 

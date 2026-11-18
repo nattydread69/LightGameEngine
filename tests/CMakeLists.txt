@@ -44,9 +44,10 @@ endif()
 
 # Requires a display and a Vulkan-capable device, so it is labelled separately and
 # excluded by the default test preset. Run with: ctest --test-dir build -L vulkan
-if(TARGET BasicScene)
+if(TARGET BasicScene AND TARGET SpriteDemo)
 	add_test(NAME VulkanSmokeBasicScene COMMAND BasicScene --frames 90 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/BasicScene.png)
 	add_test(NAME VulkanSmokeRobotArena COMMAND RobotArena --frames 90 --autopilot --screenshot ${CMAKE_CURRENT_BINARY_DIR}/RobotArena.png)
+	add_test(NAME VulkanSmokeSpriteDemo COMMAND SpriteDemo --frames 90 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/SpriteDemo.png)
 	add_test(NAME VulkanSmokeBasicWindow COMMAND BasicWindow --frames 60)
-	set_tests_properties(VulkanSmokeBasicScene VulkanSmokeRobotArena VulkanSmokeBasicWindow PROPERTIES LABELS "vulkan;integration" TIMEOUT 60)
+	set_tests_properties(VulkanSmokeBasicScene VulkanSmokeSpriteDemo VulkanSmokeRobotArena VulkanSmokeBasicWindow PROPERTIES LABELS "vulkan;integration" TIMEOUT 60)
 endif()

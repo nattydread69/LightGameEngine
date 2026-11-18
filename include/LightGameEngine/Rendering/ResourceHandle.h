@@ -47,8 +47,10 @@ struct ResourceHandle
 
 struct MeshTag;
 struct MaterialTag;
+struct TextureTag;
 using MeshHandle = ResourceHandle<MeshTag>;
 using MaterialHandle = ResourceHandle<MaterialTag>;
+using TextureHandle = ResourceHandle<TextureTag>;
 
 // Generational slot storage behind ResourceHandle. Shared by renderer backends so
 // handle validation behaves identically everywhere.

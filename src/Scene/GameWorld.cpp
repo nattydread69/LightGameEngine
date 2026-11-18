@@ -204,6 +204,11 @@ void GameWorld::storeTransformHistory()
 		{
 			registry_.emplace<PreviousTransformComponent>(entity, transform);
 		});
+	registry_.each<TransformComponent, SpriteRendererComponent>(
+		[this](Entity const entity, TransformComponent const& transform, SpriteRendererComponent const&)
+		{
+			registry_.emplace<PreviousTransformComponent>(entity, transform);
+		});
 	registry_.each<TransformComponent, CameraComponent>(
 		[this](Entity const entity, TransformComponent const& transform, CameraComponent const&)
 		{
@@ -263,6 +268,33 @@ void GameWorld::extractRenderScene(RenderScene& scene, double const alpha) const
 	// Iteration runs in reverse storage order; restore creation order so submissions
 	// are stable and easy to reason about.
 	std::reverse(scene.objects.begin(), scene.objects.end());
+
+	registry_.each<TransformComponent, SpriteRendererComponent>(
+		[&](Entity const entity, TransformComponent const& transform, SpriteRendererComponent const& sprite)
+		{
+			if (!sprite.visible)
+			{
+				return;
+			}
+			Transform const visual = visualTransform(registry_, entity, transform, alpha);
+			RenderSprite out;
+			out.id = entity.id();
+			out.texture = sprite.texture;
+			out.position = visual.position;
+			out.size = sprite.size;
+			out.pivot = sprite.pivot;
+			out.uvRect = sprite.uvRect;
+			out.tint = sprite.tint;
+			out.orientation = sprite.orientation;
+			out.rotationRadians = sprite.rotationRadians;
+			out.rotation = visual.rotation;
+			out.flipX = sprite.flipX;
+			out.flipY = sprite.flipY;
+			out.sortOrder = sprite.sortOrder;
+			out.lit = sprite.lit;
+			scene.sprites.push_back(out);
+		});
+	std::reverse(scene.sprites.begin(), scene.sprites.end());
 
 	registry_.each<TransformComponent, LightComponent>(
 		[&](Entity, TransformComponent const& transform, LightComponent const& light)
